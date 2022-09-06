@@ -1,4 +1,8 @@
 const express = require('express');
+var formidable=require('formidable');
+var multer = require('multer');
+var nStatic = require('node-static');
+var fs=require('fs');
 const app = express();
 app.use(express.json());
 // var mysql = require('mysql');
@@ -434,13 +438,27 @@ app.post('/project',async(req,res)=>
 }
 catch(err)
 {
-    responseData=
+    let message="";
+    if(err.name=="TokenExpiredError")
     {
-        "statusCode":404,
-         "message":err.stack,
-    };
-    const jsonContent = JSON.stringify(responseData);
-    res.end(jsonContent);
+       message="Token expired please login again";
+    }
+    else if(err.name=="JsonWebTokenError")
+    {
+        message=err.message;//please contact admin
+    }
+    console.log(err);
+    console.log(err.message);
+    console.log(err.name);
+    responseData=
+        {
+            "statusCode":401,
+             "message":message,
+        };
+        const jsonContent = JSON.stringify(responseData);
+        res.status(401).end(jsonContent);
+        
+
 }
 })
 app.put('/project',async(req,res)=>
@@ -509,13 +527,27 @@ app.put('/project',async(req,res)=>
     } 
     catch (err) 
     {
-        responseData=
+        let message="";
+    if(err.name=="TokenExpiredError")
+    {
+       message="Token expired please login again";
+    }
+    else if(err.name=="JsonWebTokenError")
+    {
+        message=err.message;//please contact admin
+    }
+    console.log(err);
+    console.log(err.message);
+    console.log(err.name);
+    responseData=
         {
-            "statusCode":404,
-             "message":err.stack,
+            "statusCode":401,
+             "message":message,
         };
         const jsonContent = JSON.stringify(responseData);
-        res.end(jsonContent);
+        res.status(401).end(jsonContent);
+        
+
     }
 })
 app.delete('/project',async(req,res)=>
@@ -574,15 +606,29 @@ app.delete('/project',async(req,res)=>
         })
     }
     catch(err){
-        responseData=
+        let message="";
+        if(err.name=="TokenExpiredError")
         {
-            "statusCode":404,
-             "message":err.stack,
-        };
-        const jsonContent = JSON.stringify(responseData);
-        res.end(jsonContent);
-
+           message="Token expired please login again";
+        }
+        else if(err.name=="JsonWebTokenError")
+        {
+            message=err.message;//please contact admin
+        }
+        console.log(err);
+        console.log(err.message);
+        console.log(err.name);
+        responseData=
+            {
+                "statusCode":401,
+                 "message":message,
+            };
+            const jsonContent = JSON.stringify(responseData);
+            res.status(401).end(jsonContent);
+            
     }
+
+    
     
 
 })
@@ -596,23 +642,7 @@ app.get('/project',async(req,res)=>
         console.log("the ******************"+token);
         var con=await Connection();
         var connect=con.connection;
-    // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm},async(err, decoded)=>
-    //     {
-    //         if(err)
-    //         {
-    //             responseData=
-    //             {
-    //                 "statusCode" :500,
-    //                 "message":"Invalid accesstoken"
-    //             }
-    //             let jsonContent = JSON.stringify(responseData);
-    //             res.end(jsonContent);
-    //         }    
-    //         else{
-    //             return await decoded;
-    //         }
-    //     })
-    var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+        var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
         console.log(decoded);
         console.log(decoded.roleid+decoded.userid);
         var roleId=decoded.roleid;
@@ -727,9 +757,338 @@ catch(err)
         
 }
 })
-app.post('/',(req,res)=>
+app.post('/user_details_service',async(req,res)=>
 {
+    try
+    {
+        var con=await Connection();
+        var connect=con.connection;
+        var authorizationKey = req.headers['authorization'];
+        var token=authorizationKey.split(" ")[1];
+        console.log(token);
+        var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+        var userid=decoded.userid;
+        var roleId=decoded.roleid;
+        console.log("the userid in access token "+userid);
+        let data=req.body;
+        let firstName=data.firstName;
+        let lastName=data.lastName;
+        let profile_pic="";
+        const now= new Date();
+        const currentDateAndTime = date.format(now,'DD-MM-YYYY:HH-MM-ss');
+        let query="insert into user_details(user_id,first_name,last_name,profile_pic,created_on,updated_on)values(?,?,?,?,?,?)"; 
+        connect.query(query,[userid,firstName,lastName,profile_pic,currentDateAndTime,currentDateAndTime],async(err,result)=>
+        {
+         console.log(query);
+            if(err)
+            {
+              responseData=
+              {
+                "statusCode" :500,
+                "error": err.stack,
+                "message":"error while executing the query"
+               }
+                let jsonContent = JSON.stringify(responseData);
+                res.end(jsonContent);
+            }
+            else
+            {
+            
+             let responseData=
+                {
+                "statusCode":200,
+                "message":"User details inserted successfully"
+                };
+                let jsonContent = JSON.stringify(responseData);
+                res.end(jsonContent);
+        }
 
+    })
+}
+catch(err)
+{
+    let message="";
+    if(err.name=="TokenExpiredError")
+    {
+       message="Token expired please login again";
+    }
+    else if(err.name=="JsonWebTokenError")
+    {
+        message=err.message;//please contact admin
+    }
+    console.log(err);
+    console.log(err.message);
+    console.log(err.name);
+    responseData=
+        {
+            "statusCode":401,
+             "message":message,
+        };
+        const jsonContent = JSON.stringify(responseData);
+        res.status(401).end(jsonContent);
+        
+}
+})
+app.put('/user_details_service',async(req,res)=>
+{
+    try 
+    {
+        var authorizationKey = req.headers['authorization'];
+        var token=authorizationKey.split(" ")[1];
+        console.log(token);
+        const now= new Date();
+        const currentDateAndTime = date.format(now,'DD-MM-YYYY HH:MM:ss');
+        var con=await Connection();
+        var connect=con.connection;
+        var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+    var userid=decoded.userid;
+    var roleId=decoded.roleid;
+    console.log("the userid in access token "+userid);
+    let data=req.body;
+    let firstName=data.firstName;
+    let lastName=data.lastName;
+    let profilePic="";
+    let query="update user_details set first_name=?,last_name=?,profile_pic=?,updated_on=? where created_by=?"; 
+    connect.query(query,[firstName,lastName,profilePic,currentDateAndTime,userid],async(err,result)=>
+    {
+        if(err)
+        {
+            responseData=
+            {
+                "statusCode" :500,
+                "error": err.stack,
+                "message":"error while executing the query"
+            }
+            let jsonContent = JSON.stringify(responseData);
+            res.end(jsonContent);
+
+        }
+        else{
+
+            responseData=
+            {
+            "statusCode":200,
+            "message":"User details updated successfully"
+            };
+            const jsonContent = JSON.stringify(responseData);
+                        res.end(jsonContent);
+        }
+
+    })
+    } 
+    catch (err) 
+    {
+        let message="";
+    if(err.name=="TokenExpiredError")
+    {
+       message="Token expired please login again";
+    }
+    else if(err.name=="JsonWebTokenError")
+    {
+        message=err.message;//please contact admin
+    }
+    console.log(err);
+    console.log(err.message);
+    console.log(err.name);
+    responseData=
+        {
+            "statusCode":401,
+             "message":message,
+        };
+        const jsonContent = JSON.stringify(responseData);
+        res.status(401).end(jsonContent);
+        
+
+    }
+})
+app.delete('/user_details_service',async(req,res)=>
+{
+    try{
+        var authorizationKey = req.headers['authorization'];
+        var token=authorizationKey.split(" ")[1];
+        console.log(token);
+        var con=await Connection();
+        var connect=con.connection;
+        var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+        // var userId=req.query.UserId;
+        var userId=decoded.userid;
+        var roleId=decoded.roleid;
+        console.log("the userid in access token "+userId);
+        let query="delete from user_details where created_by= ?";
+        connect.query(query,[userId],async(err,queryResults)=>
+        {
+            if(err)
+            {
+                responseData=
+            {
+                "statusCode" :500,
+                "error": err.stack,
+                "message":"Error while executing the query"
+            }
+            let jsonContent = JSON.stringify(responseData);
+            res.end(jsonContent);
+            }
+            else{
+                responseData=
+                {
+                    "statusCode":404,
+                     "message":"User details deleted successfully",
+                };
+                const jsonContent = JSON.stringify(responseData);
+                res.end(jsonContent);
+            }
+        })
+    }
+    catch(err){
+        let message="";
+        if(err.name=="TokenExpiredError")
+        {
+           message="Token expired please login again";
+        }
+        else if(err.name=="JsonWebTokenError")
+        {
+            message=err.message;//please contact admin
+        }
+        console.log(err);
+        console.log(err.message);
+        console.log(err.name);
+        responseData=
+            {
+                "statusCode":401,
+                 "message":message,
+            };
+            const jsonContent = JSON.stringify(responseData);
+            res.status(401).end(jsonContent);
+            
+    }
+
+})
+
+app.get('/user_details_service',async(req,res)=>
+{
+    try{
+        var authorizationKey = req.headers['authorization'];
+        var token=authorizationKey.split(" ")[1];
+        console.log(token);
+        console.log(req.headers);
+        console.log("the ******************"+token);
+        var con=await Connection();
+        var connect=con.connection;
+    // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm},async(err, decoded)=>
+    //     {
+    //         if(err)
+    //         {
+    //             responseData=
+    //             {
+    //                 "statusCode" :500,
+    //                 "message":"Invalid accesstoken"
+    //             }
+    //             let jsonContent = JSON.stringify(responseData);
+    //             res.end(jsonContent);
+    //         }    
+    //         else{
+    //             return await decoded;
+    //         }
+    //     })
+    var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+        console.log(decoded);
+        console.log(decoded.roleid+decoded.userid);
+        var roleId=decoded.roleid;
+        var userid=decoded.userid;
+        console.log("the userid in access token "+userid);
+        let queryForAll="select * from user_details where user_id=?";
+         connect.query(queryForAll,[userid],(err,result)=>
+            {
+               if(err)
+               {
+                responseData=
+                {
+                    "statusCode" :500,
+                    "error": err.stack,
+                    "message":"Error while executing the query"
+                }
+                let jsonContent = JSON.stringify(responseData);
+                res.end(jsonContent)
+
+               }
+               else{
+                    let responseData="";
+                    if(result.length==0)
+                    {
+                        responseData=
+                        {
+                            "statusCode" :200,
+                            "message":"No user details found"                    
+                        }
+                    }
+                    else
+                    {
+                        responseData=
+                         {
+                             "statusCode" :200,
+                             "message":"Listing of user details succesfully",
+                            "data":result
+                         }
+                    }
+                    let jsonContent = JSON.stringify(responseData);
+                    res.end(jsonContent);
+               }
+
+            }
+        )
+        
+    }
+catch(err)
+{
+    let message="";
+    if(err.name=="TokenExpiredError")
+    {
+       message="Token expired please login again";
+    }
+    else if(err.name=="JsonWebTokenError")
+    {
+        message=err.message;//please contact admin
+    }
+    console.log(err);
+    console.log(err.message);
+    console.log(err.name);
+    responseData=
+        {
+            "statusCode":401,
+             "message":message,
+        };
+        const jsonContent = JSON.stringify(responseData);
+        res.status(401).end(jsonContent);
+        
+}
+})
+app.post('/uploadProfilepic',async(req,res)=>
+{
+    let form = new formidable.IncomingForm();
+    var dir = './profilepicUploads';
+    if (!fs.existsSync(dir)){
+       fs.mkdirSync(dir);
+     }  
+    //  var fileServer = new nStatic.Server('./public');
+    form.parse(req, async function (err, fields, files) {
+        console.log(files.filetoupload.filepath);
+        var oldpath =await files.filetoupload.filepath;
+        console.log(files.filetoupload.filepath);
+        var newpath = dir;
+        fs.readFile(files.filetoupload.filepath, function (err, data) {
+            if (err) throw err;
+            console.log('File read!');
+        fs.writeFile( newpath+"/user.png",data, function(err){
+        if (err) throw err;
+        var ee=newpath+"/user.png"
+        var fileServer = new nStatic.Server('ee');
+        
+        // res.write('File uploaded and moved!');
+        res.send(fileServer);
+        res.end();
+      });
+    })
+    })
 })
 const port = 8877;
 app.listen(port, () => {
