@@ -109,6 +109,32 @@ catch(err)
     console.log(err.stack);
 }
 }
+async function getNameAndprofile(userId,db,connection)
+{   
+    let data="";
+    let queryforUserdetails ="select first_name,last_name,profile_pic from user_details where user_id=?"
+    const result=await db.query(connection,queryforUserdetails,[userId]);
+    console.log(result);
+    if(await result.length==0)
+    {
+        data={"first_name":" ","last_name":" ","profile_pic":" "};
+    }
+    else{
+        console.log("entered");
+        data={"first_name":result[0].first_name,"last_name":result[0].last_name_name,"profile_pic":result[0].profilr_pic};
+    }
+    console.log(data);
+    return await data;
+}
+async function checkUserDetails(userId,db,connection)
+{   
+    let data="";
+    let queryforUserdetails ="select * from user_details where user_id=?"
+    const result=await db.query(connection,queryforUserdetails,[userId]);
+    console.log("2345"+result);
+    console.log(result.length)
+    return await result.length;
+}
 module.exports={
-    emialIdcheck,checkUsrname,checkRole,getUserName
+    emialIdcheck,checkUsrname,checkRole,getUserName,getNameAndprofile,checkUserDetails
 }
