@@ -91,16 +91,27 @@ app.post('/registration',async(req,res)=>
     let userNamelength=validator.isMaxLength(userName,2,min_length=20);
     console.log(userNamelength);
     console.log(userName.length);
-    if(userNameValidation==false||userName.length<=2||userName.length>=20)
+    if(userNameValidation==false)
     {
         let responseData=
                 {
                     "statusCode" :202,
-                    "message":"Enter valid user name"
+                    "message":"User Name accepts only alphanumaric"
                 }                 
                 let jsonContent = JSON.stringify(responseData);
                 res.end(jsonContent);
                 return res;
+    }
+    if(userName.length<=2||userName.length>20)
+    {
+        let responseData=
+        {
+            "statusCode" :202,
+            "message":"Enter user name range in between 3 to 20 chnaracter only"
+        }                 
+        let jsonContent = JSON.stringify(responseData);
+        res.end(jsonContent);
+        return res;  
     }
     let Usernamestatus=await userMailCheck.checkUsrname(userName,con.db,con.connection);
     console.log("the username status ");
@@ -378,9 +389,9 @@ app.post('/userlogin',async(req,res)=>
                 const isValidPass =await passwordHashFile.comparePassword(userEnteredPassword,passwordinDB);
                 if(!isValidPass)
                 {
-                    result="In valid password enter valid user name and password";
+                    result="Invalid password enter valid user name and password";
                     responseData={
-                        "statusCode":200,
+                        "statusCode":201,
                          "result":result,
                        };
                        let jsonContent = JSON.stringify(responseData);
@@ -893,14 +904,38 @@ app.post('/user_details_service',async(req,res)=>
         let lastName=data.lastName;
                 let checkFname=validator.isAlpha(firstName);
                 let checkLname=validator.isAlpha(lastName);
+                console.log(checkFname);
+                console.log(checkLname);
                 let fnLength=validator.isMaxLength(firstName,50,min_length=2);
                 let lnLength=validator.isMaxLength(lastName,50,min_length=2);
-                if(checkFname==false||checkLname==false||fnLength==false||lnLength==false)
+                // if(checkFname==false||checkLname==false||fnLength==false||lnLength==false)
+                //     {
+                //      let responseData=
+                //         {
+                //          "statusCode" :202,
+                //         "message":"Enter valid First Name and Last Name "
+                //         }                 
+                //         let jsonContent = JSON.stringify(responseData);
+                //         res.end(jsonContent);
+                //      return res;
+                //     }
+                if(checkFname==false||checkLname==false)
                     {
                      let responseData=
                         {
                          "statusCode" :202,
-                        "message":"Enter valid First Name and Last Name "
+                        "message":"First Name and last Name accepts only alphabets "
+                        }                 
+                        let jsonContent = JSON.stringify(responseData);
+                        res.end(jsonContent);
+                     return res;
+                    }
+                    if(firstName.length<2||firstName.length>=50||lastName.length<2||lastName.length>=50)
+                    {
+                        let responseData=
+                        {
+                         "statusCode" :202,
+                        "message":"Enter first name and last name range in between 3 to 50 chnaracter only "
                         }                 
                         let jsonContent = JSON.stringify(responseData);
                         res.end(jsonContent);
@@ -1020,12 +1055,34 @@ app.put('/user_details_service',async(req,res)=>
                 let checkLname=validator.isAlpha(lastName);
                 let fnLength=validator.isMaxLength(firstName,50,min_length=2);
                 let lnLength=validator.isMaxLength(lastName,50,min_length=2);
-                if(checkFname==false||checkLname==false||fnLength==false||lnLength==false)
+                // if(checkFname==false||checkLname==false||fnLength==false||lnLength==false)
+                //     {
+                //      let responseData=
+                //         {
+                //          "statusCode" :202,
+                //         "message":"Enter valid First Name and Last Name "
+                //         }                 
+                //         let jsonContent = JSON.stringify(responseData);
+                //         res.end(jsonContent);
+                //      return res;
+                //     }
+                if(checkFname==false||checkLname==false)
                     {
                      let responseData=
                         {
                          "statusCode" :202,
-                        "message":"Enter valid First Name and Last Name "
+                        "message":"First Name and last Name accepts only alphabets "
+                        }                 
+                        let jsonContent = JSON.stringify(responseData);
+                        res.end(jsonContent);
+                     return res;
+                    }
+                    if(firstName.length<2||firstName.length>=50||lastName.length<2||lastName.length>=50)
+                    {
+                        let responseData=
+                        {
+                         "statusCode" :202,
+                        "message":"Enter first name and last name range in between 3 to 50 chnaracter only "
                         }                 
                         let jsonContent = JSON.stringify(responseData);
                         res.end(jsonContent);
@@ -1415,12 +1472,23 @@ app.post('/user_profile',async(req,res)=>
                 let checkLname=validator.isAlpha(lastName);
                 let fnLength=validator.isMaxLength(firstName,50,min_length=2);
                 let lnLength=validator.isMaxLength(lastName,50,min_length=2);
-                if(checkFname==false||checkLname==false||fnLength==false||lnLength==false)
+                if(checkFname==false||checkLname==false)
                     {
                      let responseData=
                         {
                          "statusCode" :202,
-                        "message":"Enter valid First Name and Last Name "
+                        "message":"First Name and last Name accepts only alphabets "
+                        }                 
+                        let jsonContent = JSON.stringify(responseData);
+                        res.end(jsonContent);
+                     return res;
+                    }
+                    if(firstName.length<2||firstName.length>=50||lastName.length<2||lastName.length>=50)
+                    {
+                        let responseData=
+                        {
+                         "statusCode" :202,
+                        "message":"Enter first name and last name range in between 3 to 50 chnaracter only "
                         }                 
                         let jsonContent = JSON.stringify(responseData);
                         res.end(jsonContent);
@@ -1620,12 +1688,34 @@ app.put('/user_profile',async(req,res)=>
                 let checkLname=validator.isAlpha(lastName);
                 let fnLength=validator.isMaxLength(firstName,50,min_length=2);
                 let lnLength=validator.isMaxLength(lastName,50,min_length=2);
-                if(checkFname==false||checkLname==false||fnLength==false||lnLength==false)
+                // if(checkFname==false||checkLname==false||fnLength==false||lnLength==false)
+                //     {
+                //      let responseData=
+                //         {
+                //          "statusCode" :202,
+                //         "message":"Enter valid First Name and Last Name "
+                //         }                 
+                //         let jsonContent = JSON.stringify(responseData);
+                //         res.end(jsonContent);
+                //      return res;
+                //     }
+                if(checkFname==false||checkLname==false)
                     {
                      let responseData=
                         {
                          "statusCode" :202,
-                        "message":"Enter valid First Name and Last Name "
+                        "message":"First Name and last Name accepts only alphabets "
+                        }                 
+                        let jsonContent = JSON.stringify(responseData);
+                        res.end(jsonContent);
+                     return res;
+                    }
+                    if(firstName.length<2||firstName.length>=50||lastName.length<2||lastName.length>=50)
+                    {
+                        let responseData=
+                        {
+                         "statusCode" :202,
+                        "message":"Enter first name and last name range in between 3 to 50 chnaracter only "
                         }                 
                         let jsonContent = JSON.stringify(responseData);
                         res.end(jsonContent);
@@ -1908,7 +1998,7 @@ catch(err)
         
 }
 })
-app.delete('/deteUserdetails',async(req,res)=>
+app.delete('/deleteUserdetails',async(req,res)=>
 {
     try{
         var authorizationKey = req.headers['authorization'];
