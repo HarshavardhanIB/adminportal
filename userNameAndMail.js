@@ -77,6 +77,23 @@ catch(err)
 //     await db.close(connection);
 // } 
 }
+async function checkmail(mailId)
+{
+    var email = mailId;
+    console.log(email);
+    var emailFilter = /^([a-zA-Z0-9_\.\-])+\@(([a-zA-Z0-9\-])+\.)+([a-zA-Z0-9]{2,4})+$/;
+    console.log(emailFilter);
+    console.log("email _______________");
+    console.log(!emailFilter.test(email.value));
+    if (!emailFilter.test(email.value)) 
+    {
+    return false;
+    }
+    else 
+    {
+        return true;
+    }
+}
 async function checkRole(roleId,db,connection)
 {   
     try{
@@ -96,7 +113,45 @@ catch(err)
 }
  
 }
-
+async function getUserName(userId,db,connection)
+{
+try{
+    let userNameQuery="select user_name from users where id=?";
+    const result=await db.query(connection,userNameQuery,[userId]);
+    console.log(result);
+    return await result[0].user_name;
+    }
+catch(err)
+{
+    console.log(err.stack);
+}
+}
+async function getNameAndprofile(userId,db,connection)
+{   
+    let data="";
+    let queryforUserdetails ="select first_name,last_name,profile_pic from user_details where user_id=?"
+    const result=await db.query(connection,queryforUserdetails,[userId]);
+    console.log(result);
+    if(await result.length==0)
+    {
+        data={"first_name":" ","last_name":" ","profile_pic":" "};
+    }
+    else{
+        console.log("entered");
+        data={"first_name":result[0].first_name,"last_name":result[0].last_name_name,"profile_pic":result[0].profilr_pic};
+    }
+    console.log(data);
+    return await data;
+}
+async function checkUserDetails(userId,db,connection)
+{   
+    let data="";
+    let queryforUserdetails ="select * from user_details where user_id=?"
+    const result=await db.query(connection,queryforUserdetails,[userId]);
+    console.log("2345"+result);
+    console.log(result.length)
+    return await result.length;
+}
 module.exports={
-    emialIdcheck,checkUsrname,checkRole
+    emialIdcheck,checkUsrname,checkRole,getUserName,getNameAndprofile,checkUserDetails,checkmail
 }
