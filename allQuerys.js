@@ -1,0 +1,18 @@
+module.exports={
+    insertUsers:"insert into users(role_id,user_name,email_id,password,active,created_date_and_time,update_date_and_time)values(?,?,?,?,?,?,?)",
+    getLoginDetails:"select password,user_name,id,role_id from users where `user_name`=?||`email_id`=?",
+    insertProject:"insert into projects(project_name,project_version,created_by,created_on,updated_on)values(?,?,?,?,?)",
+    updtaeProject:"update projects set project_name=?,project_version=?,updated_on=? where id=?",
+    deleteProject:"delete from projects where id= ?",
+    getProjectsForAllDetails:"SELECT projects.*,users.user_name as createdUserName FROM projects inner join users",
+    getProjectsForparticularUsrer:"select id,project_name,project_version from projects where created_by =?",
+    insertUserDetails:"insert into user_details(user_id,first_name,last_name,created_on,updated_on)values(?,?,?,?,?)",
+    updtaeUserDetails:"update user_details set first_name=?,last_name=?,updated_on=? where user_id=?",
+    deleteUserDetails:"delete from user_details where id= ?",
+    getUserDetails:"select id,user_id,first_name,last_name,profile_pic from user_details where user_id=?",
+    insertUserDetailsWithProfilePic:"insert into user_details(user_id,first_name,last_name,profile_pic,created_on,updated_on)values(?,?,?,?,?,?)",
+    updtaeUserDetailswithProfilePic:"update user_details set first_name=?,last_name=?,profile_pic=?,updated_on=? where user_id=?",
+    deleteProjectsBasedonCreatedby:"delete from projects where created_by=?",
+    deleteUser:"delete from users where id=?",
+    usersCount:"select count(*) as count from users where role_id=?",
+}

@@ -10,19 +10,25 @@ var nstatic = require('node-static');
 var emailValidator=require('email-validator');
 const app = express();
 app.use(express.json());
+// const accessTokenSecret = 'ideabytes';
 // var mysql = require('mysql');
 const PortId="http://192.168.1.84:8877";
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const bodyParser = require('body-parser');
+const apiModules=require('./apiModules');
+const allQuerys=require('./allQuerys');
 const userMailCheck=require('./userNameAndMail');
 const date = require('date-and-time');
 const expiresIn="10m";
 const algorithm="HS512";
 app.use(bodyParser.urlencoded({ extended: true })); 
+var accessTokenSecret=process.env.SECRETTOKEN;
+var userid;
+var roleId;
 app.use(function (req, res, next) {
     // console.log("request");
-    // console.log(req);
+    console.log(req);
     // console.log(req.body);
     // console.log(next);
     
@@ -37,17 +43,58 @@ app.use(function (req, res, next) {
 
     // Set to true if you need the website to include cookies in the requests sent    // to the API (e.g. in case you use sessions)
     res.setHeader('Access-Control-Allow-Credentials', true);
-    
-
-    // Pass to next layer of  middlewarenext();
-    next();
+    console.log(req.path);
+    if(req.path=='/userlogin'||req.path=='/registration')
+    {
+        console.log("if block enter");
+        next();
+    }
+    else
+    {
+        try{
+             console.log("use try block enter");
+            var authorizationKey = req.headers['authorization'];
+            var token=authorizationKey.split(" ")[1];
+            var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+            userid=decoded.userid;
+            roleId=decoded.roleid;
+            console.log(userid);
+            next();
+            }
+            catch(err)
+            {
+            let message="";
+            if(err.name=="TokenExpiredError")
+            {
+               message="Token expired please login again";
+            }
+            else if(err.name=="JsonWebTokenError")
+            {
+                message=err.message;//please contact admin
+            }
+            else
+            {
+                message=err.message;
+            }
+            console.log(err);
+            console.log(err.message);
+            console.log(err.name);
+            responseData=
+            {
+                "statusCode":401,
+                 "message":message,
+            };
+            const jsonContent = JSON.stringify(responseData);
+            res.status(401).end(jsonContent);
+            return res;
+            }
+        }
 })
 app.use('/images', express.static(__dirname + '/profilepic'));
-// const dbConnection = require('./DBConnection');
 var passwordHashFile=require('./passwordHashing');
 const {Connection} = require('./DBConnection');
 const { url } = require('inspector');
-const accessTokenSecret = 'ideabytes';
+
 // dotenv.config();
 // var con = mysql.createConnection({
 //     host: "localhost",
@@ -57,7 +104,7 @@ const accessTokenSecret = 'ideabytes';
 //     port:3306,
 //     insecureAuth : true,
 //      });
-app.post('/registration',async(req,res)=>
+app.post(apiModules.registration,async(req,res)=>
 {   
     // Pass to next layer of middlewarenext();
     console.log("register");
@@ -224,7 +271,8 @@ app.post('/registration',async(req,res)=>
 
     // }
     // )
-    let query="insert into users(role_id,user_name,email_id,password,active,created_date_and_time,update_date_and_time)values(?,?,?,?,?,?,?)";
+    // let query="insert into users(role_id,user_name,email_id,password,active,created_date_and_time,update_date_and_time)values(?,?,?,?,?,?,?)";
+    let query=allQuerys.insertUsers;
     // "+" ('"+roleid+"','"+userName+"','"+emailId+"','"+passwordHash+"','"+active+"','"+currentDateAndTime+"','"+currentDateAndTime+"')";
     console.log("%%%%%%%"+query);
     var connect=con.connection;
@@ -283,7 +331,7 @@ app.get('/userNameAndMailIdsinDB',(req,res)=>
                 responseData={
                     "statusCode":500,
                     "error":err.stack,
-                    "result":"getting error while getting the data from the data base"
+                    "message":"Error while getting the data from the data base"
                 }
             }    
         else
@@ -308,7 +356,7 @@ catch(err)
         res.end(jsonContent);
 }
 })
-app.post('/userlogin',async(req,res)=>
+app.post(apiModules.login,async(req,res)=>
 {
     try
     {
@@ -332,8 +380,8 @@ app.post('/userlogin',async(req,res)=>
         var con=await Connection();
         var connect=con.connection;
         // let query="select password from user_details where `user_name`='"+userName+"'||`email_id`='"+emailId+"'";
-        let query="select password,user_name,id,role_id from users where `user_name`=?||`email_id`=?";
-        
+        // let query="select password,user_name,id,role_id from users where `user_name`=?||`email_id`=?";
+        let query=allQuerys.getLoginDetails;        
         connect.query(query,[userName,emailId],async(err,queryResult)=>
         {
          let responseData="";
@@ -415,7 +463,8 @@ app.post('/userlogin',async(req,res)=>
                             let adminrole=1;
                             let userrole=2;
                             // var connect=con.connection;
-                            let query="select count(*) as count from users where role_id=?";
+                            // let query="select count(*) as count from users where role_id=?";
+                            let query=allQuerys.usersCount;
                             // let adminCountresult=connect.query(query,[adminrole]);
                             // let userCountresult=connect.query(query,[userrole]);
                             connect.query(query,[adminrole],async function(err,result)
@@ -433,7 +482,7 @@ app.post('/userlogin',async(req,res)=>
                                     let responseData=
                                     {
                                     "statusCode":200,
-                                    "message":"Login successful",
+                                    "message":"Login successfully",
                                     // "accessToken":accessToken,
                                     "data":data
                                     };
@@ -485,7 +534,7 @@ app.post('/userlogin',async(req,res)=>
     }
 
 })
-app.post('/checkorvalidateJwt',async(req,res)=>{
+app.post(apiModules.checkJwt,async(req,res)=>{
     let data=req.body;
     let token=data.accessToken;
     var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
@@ -499,15 +548,15 @@ app.post('/checkorvalidateJwt',async(req,res)=>{
           const jsonContent = JSON.stringify(responseData);
            res.end(jsonContent);
 })
-app.post('/project',async(req,res)=>
+app.post(apiModules.project,async(req,res)=>
 {
     try
     {
         var con=await Connection();
         var connect=con.connection;
-        var authorizationKey = req.headers['authorization'];
-        var token=authorizationKey.split(" ")[1];
-        console.log(token);
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // console.log(token);
     // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm},async(err, decoded)=>
     // {
     //     if(err)
@@ -525,16 +574,17 @@ app.post('/project',async(req,res)=>
     //         return await decoded;
     //     }
     // })
-    var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
-    var userid=decoded.userid;
-    var roleId=decoded.roleid;
+    // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+    // var userid=decoded.userid;
+    // var roleId=decoded.roleid;
     console.log("the userid in access token "+userid);
     let data=req.body;
     let project_name=data.project_name;
     let project_version=data.project_version;
     let now= new Date();
     let currentDateAndTime = date.format(now,'DD-MM-YYYY HH:MM:SS');
-    let query="insert into projects(project_name,project_version,created_by,created_on,updated_on)values(?,?,?,?,?)"; 
+    // let query="insert into projects(project_name,project_version,created_by,created_on,updated_on)values(?,?,?,?,?)"; 
+    let query=allQuerys.insertProject;
     connect.query(query,[project_name,project_version,userid,currentDateAndTime,currentDateAndTime],async(err,result)=>
     {
         console.log(query);
@@ -588,13 +638,13 @@ catch(err)
 
 }
 })
-app.put('/project',async(req,res)=>
+app.put(apiModules.project,async(req,res)=>
 {
     try 
     {
-        var authorizationKey = req.headers['authorization'];
-        var token=authorizationKey.split(" ")[1];
-        console.log(token);
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // console.log(token);
         let now= new Date();
         let currentDateAndTime = date.format(now,'DD-MM-YYYY HH:MM:SS');
         var con=await Connection();
@@ -616,16 +666,17 @@ app.put('/project',async(req,res)=>
         //         return await decoded;
         //     }
         // })
-        var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
-    var userid=decoded.userid;
-    var roleId=decoded.roleid;
+        // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+    // var userid=decoded.userid;
+    // var roleId=decoded.roleid;
     console.log("the userid in access token "+userid);
     let data=req.body;
     let firstproject_name=data.project_name;
     let project_version=data.project_version;
     var id=req.query.id;
     let profilePic="";
-    let query="update projects set project_name=?,project_version=?,updated_on=? where id=?"; 
+    // let query="update projects set project_name=?,project_version=?,updated_on=? where id=?"; 
+    let query=allQuerys.updtaeProject;
     connect.query(query,[firstproject_name,project_version,currentDateAndTime,id],async(err,result)=>
     {
         if(err)
@@ -678,12 +729,12 @@ app.put('/project',async(req,res)=>
 
     }
 })
-app.delete('/project',async(req,res)=>
+app.delete(apiModules.project,async(req,res)=>
 {
     try{
-        var authorizationKey = req.headers['authorization'];
-        var token=authorizationKey.split(" ")[1];
-        console.log(token);
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // console.log(token);
         var con=await Connection();
         var connect=con.connection;
         //  var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm},async(err, decoded)=>
@@ -703,13 +754,14 @@ app.delete('/project',async(req,res)=>
         //         return await decoded;
         //     }
         // })
-        var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
-        // var userId=req.query.UserId;
-        var userId=decoded.userid;
-        var roleId=decoded.roleid;
+        // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+        // // var userId=req.query.UserId;
+        // var userId=decoded.userid;
+        // var roleId=decoded.roleid;
         let id=req.query.id;
         // console.log("the userid in access token "+userId);
-        let query="delete from projects where id= ?";
+        // let query="delete from projects where id= ?";
+        let query=allQuerys.deleteProject;
         connect.query(query,[id],async(err,queryResults)=>
         {
             if(err)
@@ -761,24 +813,26 @@ app.delete('/project',async(req,res)=>
     
 
 })
-app.get('/project',async(req,res)=>
+app.get(apiModules.project,async(req,res)=>
 {
     try{
-        var authorizationKey = req.headers['authorization'];
-        var token=authorizationKey.split(" ")[1];
-        console.log(token);
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // console.log(token);
         console.log(req.headers);
         console.log("the ******************"+token);
         var con=await Connection();
         var connect=con.connection;
-        var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
-        console.log(decoded);
-        console.log(decoded.roleid+decoded.userid);
-        var roleId=decoded.roleid;
-        var userid=decoded.userid;
+        // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+        // console.log(decoded);
+        // console.log(decoded.roleid+decoded.userid);
+        // var roleId=decoded.roleid;
+        // var userid=decoded.userid;
         console.log("the userid in access token "+userid);
-        let queryForAll="SELECT projects.*,users.user_name as createdUserName FROM projects inner join users";
-        let queryForparticularUsrer="select id,project_name,project_version from projects where created_by =?";
+        // let queryForAll="SELECT projects.*,users.user_name as createdUserName FROM projects inner join users";
+        let queryForAll=allQuerys.getProjectsForAllDetails;
+        // let queryForparticularUsrer="select id,project_name,project_version from projects where created_by =?";
+        let queryForparticularUsrer=allQuerys.getProjectsForparticularUsrer;
         if(roleId==1)
         {
             connect.query(queryForAll,(err,result)=>
@@ -886,18 +940,19 @@ catch(err)
         
 }
 })
-app.post('/user_details_service',async(req,res)=>
+app.post(apiModules.userDetailsService,async(req,res)=>
 {
     try
     {
+        console.log("++++++++++++++++++++++++++++++*****enter****++++++++++++++++++++++++++++++++++++++++++");
         var con=await Connection();
         var connect=con.connection;
-        var authorizationKey = req.headers['authorization'];
-        var token=authorizationKey.split(" ")[1];
-        console.log(token);
-        var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
-        var userid=decoded.userid;
-        var roleId=decoded.roleid;
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // console.log(token);
+        // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+        // var userid=decoded.userid;
+        // var roleId=decoded.roleid;
         console.log("the userid in access token "+userid);
         let data=req.body;
         let firstName=data.firstName;
@@ -948,7 +1003,8 @@ app.post('/user_details_service',async(req,res)=>
         console.log(details+"!!!!!!!!!!!!!!!!!!!");
         if(details==0)
         {
-        let query="insert into user_details(user_id,first_name,last_name,created_on,updated_on)values(?,?,?,?,?)"; 
+        // let query="insert into user_details(user_id,first_name,last_name,created_on,updated_on)values(?,?,?,?,?)"; 
+        let query=allQuerys.insertUserDetails;
         connect.query(query,[userid,firstName,lastName,currentDateAndTime,currentDateAndTime],async(err,result)=>
         {
          console.log(query);
@@ -979,7 +1035,8 @@ app.post('/user_details_service',async(req,res)=>
     }
         else
         {
-    let query="update user_details set first_name=?,last_name=?,updated_on=? where user_id=?"; 
+    // let query="update user_details set first_name=?,last_name=?,updated_on=? where user_id=?"; 
+    let query=allQuerys.updtaeUserDetails;
     connect.query(query,[firstName,lastName,currentDateAndTime,userid],async(err,result)=>
     {
         if(err)
@@ -1033,20 +1090,20 @@ catch(err)
         
 }
 })
-app.put('/user_details_service',async(req,res)=>
+app.put(apiModules.userDetailsService,async(req,res)=>
 {
     try 
     {
-        var authorizationKey = req.headers['authorization'];
-        var token=authorizationKey.split(" ")[1];
-        console.log(token);
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // console.log(token);
         let now= new Date();
         let currentDateAndTime = date.format(now,'DD-MM-YYYY HH:MM:SS');
         var con=await Connection();
         var connect=con.connection;
-        var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
-        var userid=decoded.userid;
-        var roleId=decoded.roleid;
+        // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+        // var userid=decoded.userid;
+        // var roleId=decoded.roleid;
         console.log("the userid in access token "+userid);
         let data=req.body;
         let firstName=data.firstName;
@@ -1090,7 +1147,8 @@ app.put('/user_details_service',async(req,res)=>
                     }
         let id=req.query.id;
         let profilePic="";
-        let query="update user_details set first_name=?,last_name=?,updated_on=? where id=?"; 
+        // let query="update user_details set first_name=?,last_name=?,updated_on=? where id=?"; 
+        let query=allQuerys.updtaeUserDetails;
         connect.query(query,[firstName,lastName,currentDateAndTime,id],async(err,result)=>
      {
         if(err)
@@ -1143,21 +1201,22 @@ app.put('/user_details_service',async(req,res)=>
 
     }
 })
-app.delete('/user_details_service',async(req,res)=>
+app.delete(apiModules.userDetailsService,async(req,res)=>
 {
     try{
-        var authorizationKey = req.headers['authorization'];
-        var token=authorizationKey.split(" ")[1];
-        console.log(token);
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // console.log(token);
         var con=await Connection();
         var connect=con.connection;
-        var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+        // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
         // var userId=req.query.UserId;
-        var userId=decoded.userid;
-        var roleId=decoded.roleid;
+        // var userId=decoded.userid;
+        // var roleId=decoded.roleid;
         let id=req.query.id;
         // console.log("the userid in access token "+userId);
-        let query="delete from user_details where id= ?";
+        // let query="delete from user_details where id= ?";
+        let query=allQuerys.deleteUserDetails;
         connect.query(query,[id],async(err,queryResults)=>
         {
             if(err)
@@ -1209,14 +1268,14 @@ app.delete('/user_details_service',async(req,res)=>
     }
 
 })
-app.get('/user_details_service',async(req,res)=>
+app.get(apiModules.userDetailsService,async(req,res)=>
 {
     try{
-        var authorizationKey = req.headers['authorization'];
-        var token=authorizationKey.split(" ")[1];
-        console.log(token);
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // console.log(token);
         console.log(req.headers);
-        console.log("the ******************"+token);
+        // console.log("the ******************"+token);
         var con=await Connection();
         var connect=con.connection;
     // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm},async(err, decoded)=>
@@ -1235,14 +1294,15 @@ app.get('/user_details_service',async(req,res)=>
     //             return await decoded;
     //         }
     //     })
-    var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
-        console.log(decoded);
-        console.log(decoded.roleid+decoded.userid);
-        var roleId=decoded.roleid;
-        var userid=decoded.userid;
+    // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+    //     console.log(decoded);
+    //     console.log(decoded.roleid+decoded.userid);
+    //     var roleId=decoded.roleid;
+    //     var userid=decoded.userid;
         console.log("the userid in access token "+userid);
-        let queryForAll="select id,user_id,first_name,last_name,profile_pic from user_details where user_id=?";
-         connect.query(queryForAll,[userid],(err,result)=>
+        // let queryForAll="select id,user_id,first_name,last_name,profile_pic from user_details where user_id=?";
+        let queryForAll=allQuerys.getUserDetails; 
+        connect.query(queryForAll,[userid],(err,result)=>
             {
                if(err)
                {
@@ -1310,18 +1370,18 @@ catch(err)
         
 }
 })
-app.post('/uploadProfilepic',async(req,res)=>
+app.post(apiModules.uploadProfirePic,async(req,res)=>
 {   
      try
         {
         console.log( req.ip);
         const ipAdd=req.socket.localAddress;
         let form = new formidable.IncomingForm();
-        var authorizationKey = req.headers['authorization'];
-        var token=authorizationKey.split(" ")[1];
-        var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
-        var userid=decoded.userid;
-        var roleId=decoded.roleid;
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+        // var userid=decoded.userid;
+        // var roleId=decoded.roleid;
         var con=await Connection();
         var connect=con.connection;
         let db=con.db;
@@ -1442,18 +1502,18 @@ app.post('/uploadProfilepic',async(req,res)=>
         res.status(401).end(jsonContent);
     }
 })
-app.post('/user_profile',async(req,res)=>
+app.post(apiModules.userProfile,async(req,res)=>
 {
     try
     {       
         console.log(req.body);
         var con=await Connection();
         var connect=con.connection;
-        var authorizationKey = req.headers['authorization'];
-        var token=authorizationKey.split(" ")[1];
-        var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
-        var userid=decoded.userid;
-        var roleId=decoded.roleid;
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+        // var userid=decoded.userid;
+        // var roleId=decoded.roleid;
         console.log("the userid in access token "+userid);
         // let data=req.body;
         // let firstName=data.firstName;
@@ -1552,7 +1612,8 @@ app.post('/user_profile',async(req,res)=>
                             // console.log(resultsforinsertorupdate)
                             if(details==0)
                             {
-                             let query="insert into user_details(user_id,first_name,last_name,profile_pic,created_on,updated_on)values(?,?,?,?,?,?)"; 
+                            //  let query="insert into user_details(user_id,first_name,last_name,profile_pic,created_on,updated_on)values(?,?,?,?,?,?)"; 
+                            let query=allQuerys.insertUserDetailsWithProfilePic;
                             connect.query(query,[userid,firstName,lastName,profilepicPath,currentDateAndTime,currentDateAndTime],async(err,result)=>
                                  {
                                 console.log(query);
@@ -1582,7 +1643,8 @@ app.post('/user_profile',async(req,res)=>
                                 })
                             }
                             else{
-                                let query="update user_details set first_name=?,last_name=?,profile_pic=?,updated_on=? where user_id=?"; 
+                                // let query="update user_details set first_name=?,last_name=?,profile_pic=?,updated_on=? where user_id=?"; 
+                                let query=allQuerys.updtaeUserDetailswithProfilePic;
                                 connect.query(query,[firstName,lastName,profilepicPath,currentDateAndTime,userid],async(err,result)=>
                                     {
                                     console.log(query);
@@ -1658,18 +1720,18 @@ catch(err)
         
 }
 })
-app.put('/user_profile',async(req,res)=>
+app.put(apiModules.userProfile,async(req,res)=>
 {
     try
     {       
         console.log(req.body);
         var con=await Connection();
         var connect=con.connection;
-        var authorizationKey = req.headers['authorization'];
-        var token=authorizationKey.split(" ")[1];
-        var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
-        var userid=decoded.userid;
-        var roleId=decoded.roleid;
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+        // var userid=decoded.userid;
+        // var roleId=decoded.roleid;
         // console.log("the userid in access token "+userid);
         // let data=req.body;
         // let firstName=data.firstName;
@@ -1772,7 +1834,8 @@ app.put('/user_profile',async(req,res)=>
                              console.log(profilepicPath);
                              let now= new Date();
                             let currentDateAndTime = date.format(now,'DD-MM-YYYY HH:MM:SS');
-                            let query="update user_details set first_name=?,last_name=?,profile_pic=?,updated_on=? where id=?"; 
+                            // let query="update user_details set first_name=?,last_name=?,profile_pic=?,updated_on=? where id=?"; 
+                            let query=allQuerys.updtaeUserDetailswithProfilePic;
                             connect.query(query,[firstName,lastName,profilepicPath,currentDateAndTime,id],async(err,result)=>
                                 {
                                 console.log(query);
@@ -1847,21 +1910,22 @@ app.put('/user_profile',async(req,res)=>
 
     }
 })
-app.delete('/user_profile',async(req,res)=>
+app.delete(apiModules.userProfile,async(req,res)=>
 {
     try{
-        var authorizationKey = req.headers['authorization'];
-        var token=authorizationKey.split(" ")[1];
-        console.log(token);
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // console.log(token);
         var con=await Connection();
         var connect=con.connection;
         let id=req.query.id;
-        var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+        // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
         // var userId=req.query.UserId;
-        var userId=decoded.userid;
-        var roleId=decoded.roleid;
-        console.log("the userid in access token "+userId);
-        let query="delete from user_details where id= ?";
+        // var userId=decoded.userid;
+        // var roleId=decoded.roleid;
+        console.log("the userid in access token "+userid);
+        // let query="delete from user_details where id= ?";
+        let query=allQuerys.deleteUserDetails;
         connect.query(query,[id],async(err,queryResults)=>
         {
             if(err)
@@ -1913,23 +1977,24 @@ app.delete('/user_profile',async(req,res)=>
     }
 
 })
-app.get('/user_profile',async(req,res)=>
+app.get(apiModules.userProfile,async(req,res)=>
 {
     try{
-        var authorizationKey = req.headers['authorization'];
-        var token=authorizationKey.split(" ")[1];
-        console.log(token);
-        console.log(req.headers);
-        console.log("the ******************"+token);
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // console.log(token);
+        // console.log(req.headers);
+        // console.log("the ******************"+token);
         var con=await Connection();
         var connect=con.connection;
-        var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
-        console.log(decoded);
-        console.log(decoded.roleid+decoded.userid);
-        var roleId=decoded.roleid;
-        var userid=decoded.userid;
+        // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+        // console.log(decoded);
+        // console.log(decoded.roleid+decoded.userid);
+        // var roleId=decoded.roleid;
+        // var userid=decoded.userid;
         console.log("the userid in access token "+userid);
-        let queryForAll="select id,user_id,first_name,last_name,profile_pic from user_details where user_id=?";
+        // let queryForAll="select id,user_id,first_name,last_name,profile_pic from user_details where user_id=?";
+        let queryForAll=allQuerys.getUserDetails;
          connect.query(queryForAll,[userid],(err,result)=>
             {
                if(err)
@@ -1998,26 +2063,29 @@ catch(err)
         
 }
 })
-app.delete('/deleteUserdetails',async(req,res)=>
+app.delete(apiModules.deleteUserDetails,async(req,res)=>
 {
     try{
-        var authorizationKey = req.headers['authorization'];
-        var token=authorizationKey.split(" ")[1];
-        console.log(token);
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // console.log(token);
         var con=await Connection();
         var connect=con.connection;
-        var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+        // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
         // var userId=req.query.UserId;
-        var userId=decoded.userid;
-        var roleId=decoded.roleid;
+        // var userId=decoded.userid;
+        // var roleId=decoded.roleid;
         if(roleId==2)
         {
         let id=req.query.id;
         console.log("the userid in access token "+userId);
         // let query="delete users,user_details,projects from users inner join user_details inner join projects where users.id=user_details.user_id and user_details.user_id=projects.created_by and users.id=?";
-        let query="delete from users where id=?";
-        let query1="delete from user_details where user_id=?";
-        let query2="delete from projects where created_by=?";
+        // let query="delete from users where id=?";
+        let query=allQuerys.deleteUser;
+        // let query1="delete from user_details where user_id=?";
+        let query1=allQuerys.deleteUserDetails;
+        // let query2="delete from projects where created_by=?";
+        let query2=allQuerys.deleteProjectsBasedonCreatedby;
         connect.query(query,[id]);
         connect.query(query1,[id]);
         connect.query(query2,[id]);
@@ -2091,11 +2159,11 @@ app.delete('/deleteUserdetails',async(req,res)=>
             
     }    
 })
-app.post('/deletedProjectDetails',async(req,res)=>{  
+app.post(apiModules.deletedProjectDetails,async(req,res)=>{  
     try{ 
-        var authorizationKey = req.headers['authorization'];
-        var token=authorizationKey.split(" ")[1];
-        var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
         let data=req.body;
         console.log(data);
         let id=data.id;
@@ -2139,17 +2207,18 @@ app.post('/deletedProjectDetails',async(req,res)=>{
 
 
 })
-app.get('/usersCount',async(req,res)=>
+app.get(apiModules.userCount,async(req,res)=>
 {
 try{
-    var authorizationKey = req.headers['authorization'];
-    var token=authorizationKey.split(" ")[1];
-    var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+    // var authorizationKey = req.headers['authorization'];
+    // var token=authorizationKey.split(" ")[1];
+    // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
     var con=await Connection();
     let adminrole=1;
     let userrole=2;
     var connect=con.connection;
-    let query="select count(*) as count from users where role_id=?";
+    // let query="select count(*) as count from users where role_id=?";
+    let query=allQuerys.usersCount;
     // let adminCountresult=connect.query(query,[adminrole]);
     // let userCountresult=connect.query(query,[userrole]);
     connect.query(query,[adminrole],async function(err,result)
