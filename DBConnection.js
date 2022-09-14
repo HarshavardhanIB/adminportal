@@ -1,13 +1,16 @@
 const mysql = require('mysql');
+require('dotenv').config();
 const { makeDb } = require('mysql-async-simple');
 config = {
-    host: "localhost",
-    user: "root",
-    password: "Sql@2022",
-    database:"adminportal",
-    port:3306,
-    insecureAuth : true,
+    host:process.env.DB_HOST,
+    port:process.env.DB_PORT,
+    user:process.env.DB_USER,
+    password:process.env.DB_PASSWORD,
+    database:process.env.DB_DATABASE,    
+    insecureAuth : process.env.DB_INSECUREAUTH,
+    debug:true
 }
+console.log(config);
 async function Connection(){
   const connection= mysql.createConnection(config);
   const db = makeDb();

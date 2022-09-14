@@ -77,6 +77,23 @@ catch(err)
 //     await db.close(connection);
 // } 
 }
+async function checkmail(mailId)
+{
+    var email = mailId;
+    console.log(email);
+    var emailFilter = /^([a-zA-Z0-9_\.\-])+\@(([a-zA-Z0-9\-])+\.)+([a-zA-Z0-9]{2,4})+$/;
+    console.log(emailFilter);
+    console.log("email _______________");
+    console.log(!emailFilter.test(email.value));
+    if (!emailFilter.test(email.value)) 
+    {
+    return false;
+    }
+    else 
+    {
+        return true;
+    }
+}
 async function checkRole(roleId,db,connection)
 {   
     try{
@@ -136,5 +153,5 @@ async function checkUserDetails(userId,db,connection)
     return await result.length;
 }
 module.exports={
-    emialIdcheck,checkUsrname,checkRole,getUserName,getNameAndprofile,checkUserDetails
+    emialIdcheck,checkUsrname,checkRole,getUserName,getNameAndprofile,checkUserDetails,checkmail
 }

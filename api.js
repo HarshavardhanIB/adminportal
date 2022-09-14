@@ -1,25 +1,45 @@
+require('dotenv').config();
 const express = require('express');
 var formidable=require('formidable');
 var multer = require('multer');
+var nodemailer = require('nodemailer');
 var Static = require('node-static');
+var validator=require('mini-validator');
 var fs=require('fs');
 const path = require('path');
 var nstatic = require('node-static');
+var emailValidator=require('email-validator');
 const app = express();
 app.use(express.json());
-// var mysql = require('mysql');
-const PortId="http://192.168.1.84:8877";
+// const accessTokenSecret = 'ideabytes';
+app.use('/images', express.static(__dirname + '/profilepic'));
+var passwordHashFile=require('./passwordHashing');
+const {Connection} = require('./DBConnection');
+const { url } = require('inspector');
+const PortId=process.env.BASE_URL;
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const bodyParser = require('body-parser');
+const apiModules=require('./apiModules');
+const allQuerys=require('./allQuerys');
+const messages=require('./messages');
 const userMailCheck=require('./userNameAndMail');
+const constants=require('./constants');
+const email=require('./email');
 const date = require('date-and-time');
-const expiresIn="10m";
-const algorithm="HS512";
+const excel=require('./CreateExce');
+const { table } = require('console');
+// const expiresIn="10m";
+// const algorithm="HS512";
 app.use(bodyParser.urlencoded({ extended: true })); 
-app.use(function (req, res, next) {
+var accessTokenSecret=process.env.SECRETTOKEN;
+var userid;
+var roleId;
+var con;
+var connect;
+app.use(async function (req, res, next) {
     // console.log("request");
-    // console.log(req);
+    console.log(req);
     // console.log(req.body);
     // console.log(next);
     
@@ -34,17 +54,112 @@ app.use(function (req, res, next) {
 
     // Set to true if you need the website to include cookies in the requests sent    // to the API (e.g. in case you use sessions)
     res.setHeader('Access-Control-Allow-Credentials', true);
-    
+    console.log(req.path);
+    if(req.path=='/')
+    {
+        res.set('Content-Type', 'text/html');
+        res.send(Buffer.from('<h2>Please contact admin </h2>'));
+    }
+    else if(req.path=='/api/auth/login'||req.path=='/api/auth/registration')
+    {
+        console.log("if block enter");
+        con=await Connection();
+        connect=con.connection;
+        next();
+    }
+    else
+    {
 
-    // Pass to next layer of  middlewarenext();
-    next();
+        try{
+             console.log("use try block enter");
+            var authorizationKey = req.headers['authorization'];
+            var token=authorizationKey.split(" ")[1];
+            var decoded = jwt.verify(token,accessTokenSecret,{algorithm: constants.algorithm});
+            userid=decoded.userid;
+            roleId=decoded.roleid;
+            reqPath=req.path;
+            adminOrUser=reqPath.split("/")[2];
+            console.log("**********************");
+            console.log(adminOrUser);
+            if(adminOrUser=="admin"&&roleId==1)
+                {
+                    con=await Connection();
+                    connect=con.connection;
+                    next();
+                }
+                else if(adminOrUser=="user"&&roleId==2)
+                {   
+                    con=await Connection();
+                    connect=con.connection;
+                     next();
+                }
+                else
+                {
+                let responseData=
+                    {
+                        "statusCode":401,
+                         "message":"Invalid roleId and path"
+                     };
+                    const jsonContent = JSON.stringify(responseData);
+                    res.status(401).end(jsonContent);
+                    return res;
+                }                        
+            
+            }
+            catch(err)
+            {
+            let message="";
+            if(err.name=="TokenExpiredError")
+            {
+            //    message="Token expired please login again";
+            message=messages.TokenExpiredError;
+            }
+            else if(err.name=="JsonWebTokenError")
+            {
+                message=err.message;//please contact admin
+            }
+            else
+            {
+                message=err.message;
+            }
+            console.log(err);
+            console.log(err.message);
+            console.log(err.name);
+            responseData=
+            {
+                "statusCode":401,
+                 "message":message,
+            };
+            const jsonContent = JSON.stringify(responseData);
+            res.status(401).end(jsonContent);
+            return res;
+            }
+        }
+        // reqPath=req.path;
+        // adminOrUser=reqPath.split("/")[1];
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+        // userid=decoded.userid;
+        // roleId=decoded.roleid;
+        // if(adminOrUser==admin&&roleId==1)
+        // {
+        //     next();
+        // }
+        // else if(adminOrUser==user&&roleId==2)
+        // {
+        //     next();
+        // }
+        // else
+        // {
+            
+        // }
+
+
+
+        // con=await Connection();
+        // connect=con.connection;
 })
-app.use('/images', express.static(__dirname + '/profilepic'));
-// const dbConnection = require('./DBConnection');
-var passwordHashFile=require('./passwordHashing');
-const {Connection} = require('./DBConnection');
-const { url } = require('inspector');
-const accessTokenSecret = 'ideabytes';
 // dotenv.config();
 // var con = mysql.createConnection({
 //     host: "localhost",
@@ -54,12 +169,13 @@ const accessTokenSecret = 'ideabytes';
 //     port:3306,
 //     insecureAuth : true,
 //      });
-app.post('/registration',async(req,res)=>
+app.post(apiModules.registration,async(req,res)=>
 {   
     // Pass to next layer of middlewarenext();
     console.log("register");
     try
-    {// const saltRounds = 10;
+    {
+        // const saltRounds = 10;
     let data=req.body;
     console.log(req.params);
     console.log(req.body);
@@ -69,10 +185,50 @@ app.post('/registration',async(req,res)=>
     let roleid=data.roleId;
     // var connection=dbConnection.connection;
     var con=await Connection();
-
     console.log(con);
     console.log(con.db);
-    
+    let emailIdcheckStatus=validator.isEmail(emailId);
+    if(emailIdcheckStatus==false)
+    {
+        let responseData=
+                {
+                    "statusCode" :202,
+                    // "message":"Enter valid email id"
+                    "message":messages.validEmial                    
+                }                 
+                let jsonContent = JSON.stringify(responseData);
+                res.end(jsonContent);
+                return res;
+    }
+    let userNameValidation=validator.isAlphaNumber(userName);
+    console.log(userNameValidation);
+    let userNamelength=validator.isMaxLength(userName,2,min_length=20);
+    console.log(userNamelength);
+    console.log(userName.length);
+    if(userNameValidation==false)
+    {
+        let responseData=
+                {
+                    "statusCode" :202,
+                    // "message":"User Name accepts only alphanumaric"
+                    "message":messages.UNalphaNumaric
+                }                 
+                let jsonContent = JSON.stringify(responseData);
+                res.end(jsonContent);
+                return res;
+    }
+    if(userName.length<=2||userName.length>20)
+    {
+        let responseData=
+        {
+            "statusCode" :202,
+            // "message":"Enter user name range in between 3 to 20 chnaracter only"
+            "message":messages.UNRange
+        }                 
+        let jsonContent = JSON.stringify(responseData);
+        res.end(jsonContent);
+        return res;  
+    }
     let Usernamestatus=await userMailCheck.checkUsrname(userName,con.db,con.connection);
     console.log("the username status ");
     console.log(Usernamestatus);
@@ -81,7 +237,8 @@ app.post('/registration',async(req,res)=>
         let responseData=
                 {
                     "statusCode" :202,
-                    "message":"User name already exists please user another username"
+                    // "message":"User name already exists please user another username"
+                    "message":messages.UNexists
                 }                 
                 let jsonContent = JSON.stringify(responseData);
                 res.end(jsonContent);
@@ -94,7 +251,8 @@ app.post('/registration',async(req,res)=>
         let responseData=
                 {
                     "statusCode" :202,
-                    "message":"Email id already exists please user another emailid"
+                    // "message":"Email id already exists please user another emailid"
+                    "message":messages.EIexists
                 } 
                 
                 let jsonContent = JSON.stringify(responseData);
@@ -139,7 +297,8 @@ app.post('/registration',async(req,res)=>
         let responseData=
                 {
                     "statusCode" :202,
-                    "message":"In valid role id "
+                    // "message":"In valid role id "
+                    "message":messages.invalidRole
                 }                 
                 let jsonContent = JSON.stringify(responseData);
                 res.end(jsonContent);
@@ -184,10 +343,11 @@ app.post('/registration',async(req,res)=>
 
     // }
     // )
-    let query="insert into users(role_id,user_name,email_id,password,active,created_date_and_time,update_date_and_time)values(?,?,?,?,?,?,?)";
+    // let query="insert into users(role_id,user_name,email_id,password,active,created_date_and_time,update_date_and_time)values(?,?,?,?,?,?,?)";
+    let query=allQuerys.insertUsers;
     // "+" ('"+roleid+"','"+userName+"','"+emailId+"','"+passwordHash+"','"+active+"','"+currentDateAndTime+"','"+currentDateAndTime+"')";
     console.log("%%%%%%%"+query);
-    var connect=con.connection;
+    // var connect=con.connection;
     connect.query(query,[roleid,userName,emailId,passwordHash,active,currentDateAndTime,currentDateAndTime],function(err)
     {
         let responseData="";
@@ -198,7 +358,8 @@ app.post('/registration',async(req,res)=>
             {
             "statusCode" :500,
             "error": err.stack,
-            "result":"error while inserting the data " 
+            // "result":"error while inserting the data " 
+            "message":messages.errorOnInsertData
             }
             let jsonContent = JSON.stringify(responseData);
             return res.end(jsonContent); 
@@ -206,9 +367,12 @@ app.post('/registration',async(req,res)=>
         }
     else
     {
+        htmlContent="";
+    email.send365Email(process.env.EMAIL_ID,emailId,constants.registrationSubject,constants.registrationText);
     let responseData={
         "statusCode":200,
-        "message":"User regisetred successfully"
+        // "message":"User regisetred successfully"
+        "message":messages.UserRegisterSuccess
         };
          
         let jsonContent = JSON.stringify(responseData);
@@ -243,7 +407,8 @@ app.get('/userNameAndMailIdsinDB',(req,res)=>
                 responseData={
                     "statusCode":500,
                     "error":err.stack,
-                    "result":"getting error while getting the data from the data base"
+                    // "message":"Error while getting the data from the data base"
+                    "message":messages.errorwhilegetingData
                 }
             }    
         else
@@ -268,20 +433,32 @@ catch(err)
         res.end(jsonContent);
 }
 })
-app.post('/userlogin',async(req,res)=>
+app.post(apiModules.login,async(req,res)=>
 {
     try
     {
         let data=req.body;
-        let userName=data.userOrEmail;
-        let emailId=data.userOrEmail;
+        let userName=data.userName;
+        let emailId=data.userName;
         let userEnteredPassword=data.password;
         // var connection=dbConnection.connection;
+        // let emailIdcheckStatus=emailValidator.validate(emailId);
+        // if(emailIdcheckStatus==false)
+        // {
+        //     let responseData=
+        //           {
+        //               "statusCode" :202,
+        //              "message":"Enter valid email id"
+        //          }                 
+        //             let jsonContent = JSON.stringify(responseData);
+        //             res.end(jsonContent);
+        //             return res;
+        // }
         var con=await Connection();
         var connect=con.connection;
         // let query="select password from user_details where `user_name`='"+userName+"'||`email_id`='"+emailId+"'";
-        let query="select password,user_name,id,role_id from users where `user_name`=?||`email_id`=?";
-        
+        // let query="select password,user_name,id,role_id from users where `user_name`=?||`email_id`=?";
+        let query=allQuerys.getLoginDetails;        
         connect.query(query,[userName,emailId],async(err,queryResult)=>
         {
          let responseData="";
@@ -290,7 +467,8 @@ app.post('/userlogin',async(req,res)=>
             responseData={
             "statusCode" :500,
             "error": err.stack,
-            "message":"error while executing the query"
+            // "message":"error while executing the query"
+            "message":messages.errorOnInsertData
                 }
                 let jsonContent = JSON.stringify(responseData);
                 res.end(jsonContent);
@@ -337,10 +515,11 @@ app.post('/userlogin',async(req,res)=>
                 const isValidPass =await passwordHashFile.comparePassword(userEnteredPassword,passwordinDB);
                 if(!isValidPass)
                 {
-                    result="In valid password enter valid user name and password";
+                    // result="Invalid password enter valid user name and password";
                     responseData={
-                        "statusCode":200,
-                         "result":result,
+                        "statusCode":201,
+                        //  "result":result,
+                        "message":messages.invalidUSandPsw
                        };
                        let jsonContent = JSON.stringify(responseData);
                        res.end(jsonContent);
@@ -349,41 +528,70 @@ app.post('/userlogin',async(req,res)=>
                         let firstName="";
                         let lastName="";
                         let profilePic="";
-                    console.log("valid");
-                    result="login successfully";
-                    let details=await userMailCheck.getNameAndprofile(userId,con.db,con.connection);
-                    
-                    // let details=connect.query(queryforUserdetails,[userId]);
-                    console.log("the details"+details);
+                        console.log("valid");
+                        result="login successfully";
+                        let details=await userMailCheck.getNameAndprofile(userId,con.db,con.connection);
+                         // let details=connect.query(queryforUserdetails,[userId]);
+                        console.log("the details"+details);
                         firstName=details.first_name;
                         lastName=details.last_name;
                         profilePic=details.profile_pic;
-                    // console.log(details.first_name);
-                    // if(details.length==0)
-                    //     {
-                    //      firstName="";
-                    //      lastName="";
-                    //      profilePic="";
-                    //     }
-                    // else
-                    //     {
-                    //      firstName=details[0].first_name;
-                    //      lastName=details[0].last_name;
-                    //      profilePic=details[0].profile_pic;
-                    //     }
-                        var accessToken = jwt.sign({userid:userId,roleid:roleId}, accessTokenSecret,{expiresIn: expiresIn,algorithm: algorithm});
-                        let data={"userName":userName,"userId":userId,"roleId":roleId,"accessToken":accessToken,"firstName":firstName,"lastName":lastName,"profilePic":profilePic};
-                        let responseData={
-                        "statusCode":200,
-                        "message":"Login successful",
-                        // "accessToken":accessToken,
-                        "data":data
-                       };
-                    //    var accessToken = jwt.sign({userid:userId,roleid:roleId}, accessTokenSecret,{expiresIn: '24h',algorithm: algorithm});
-                    //     // console.log("************"+accessToken);
-                    const jsonContent = JSON.stringify(responseData);                  
-                    // res.json({responseData,data});
-                    res.end(jsonContent);
+                        var accessToken = jwt.sign({userid:userId,roleid:roleId}, accessTokenSecret,{expiresIn: constants.expiresIn,algorithm: constants.algorithm});
+                        if(roleId==1)
+                        {
+                            let adminrole=1;
+                            let userrole=2;
+                            // var connect=con.connection;
+                            // let query="select count(*) as count from users where role_id=?";
+                            let query=allQuerys.usersCount;
+                            // let adminCountresult=connect.query(query,[adminrole]);
+                            // let userCountresult=connect.query(query,[userrole]);
+                            connect.query(query,[adminrole],async function(err,result)
+                            {
+                                let adminCount=await result[0].count;
+                                console.log(await result[0])
+                                connect.query(query,[userrole],async function(err,userCountresult)
+                                {
+                                    let userCount=userCountresult[0].count;
+                                    console.log(await result[0]);
+                                    let totalCount=adminCount+userCount;
+                                    let count={"users":userCount,"admins":adminCount,"total":totalCount};
+                                    let data={"userName":userName,"userId":userId,"roleId":roleId,"accessToken":accessToken,"firstName":firstName,"lastName":lastName,"profilePic":profilePic,"count":count};
+                                    
+                                    let responseData=
+                                    {
+                                    "statusCode":200,
+                                    // "message":"Login successfully",
+                                    "message":messages.loginSuccess,
+                                    // "accessToken":accessToken,
+                                    "data":data
+                                    };
+                                    //    var accessToken = jwt.sign({userid:userId,roleid:roleId}, accessTokenSecret,{expiresIn: '24h',algorithm: algorithm});
+                                     //     // console.log("************"+accessToken);
+                                    const jsonContent = JSON.stringify(responseData);                  
+                                 // res.json({responseData,data});
+                                  res.end(jsonContent);
+                        
+                                })
+                        
+                            })
+                        }
+                        else{
+                            let data={"userName":userName,"userId":userId,"roleId":roleId,"accessToken":accessToken,"firstName":firstName,"lastName":lastName,"profilePic":profilePic};
+                            let responseData=
+                            {
+                            "statusCode":200,
+                            // "message":"Login successful",
+                            "message":messages.loginSuccess,
+                            // "accessToken":accessToken,
+                            "data":data
+                            };
+                            //    var accessToken = jwt.sign({userid:userId,roleid:roleId}, accessTokenSecret,{expiresIn: '24h',algorithm: algorithm});
+                             //     // console.log("************"+accessToken);
+                            const jsonContent = JSON.stringify(responseData);                  
+                         // res.json({responseData,data});
+                          res.end(jsonContent);
+                        }
                 }
                 
             }
@@ -407,7 +615,7 @@ app.post('/userlogin',async(req,res)=>
     }
 
 })
-app.post('/checkorvalidateJwt',async(req,res)=>{
+app.post(apiModules.checkJwt,async(req,res)=>{
     let data=req.body;
     let token=data.accessToken;
     var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
@@ -421,15 +629,15 @@ app.post('/checkorvalidateJwt',async(req,res)=>{
           const jsonContent = JSON.stringify(responseData);
            res.end(jsonContent);
 })
-app.post('/project',async(req,res)=>
+app.post(apiModules.adminProject,async(req,res)=>
 {
     try
     {
         var con=await Connection();
         var connect=con.connection;
-        var authorizationKey = req.headers['authorization'];
-        var token=authorizationKey.split(" ")[1];
-        console.log(token);
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // console.log(token);
     // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm},async(err, decoded)=>
     // {
     //     if(err)
@@ -447,16 +655,17 @@ app.post('/project',async(req,res)=>
     //         return await decoded;
     //     }
     // })
-    var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
-    var userid=decoded.userid;
-    var roleId=decoded.roleid;
+    // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+    // var userid=decoded.userid;
+    // var roleId=decoded.roleid;
     console.log("the userid in access token "+userid);
     let data=req.body;
     let project_name=data.project_name;
     let project_version=data.project_version;
     let now= new Date();
     let currentDateAndTime = date.format(now,'DD-MM-YYYY HH:MM:SS');
-    let query="insert into projects(project_name,project_version,created_by,created_on,updated_on)values(?,?,?,?,?)"; 
+    // let query="insert into projects(project_name,project_version,created_by,created_on,updated_on)values(?,?,?,?,?)"; 
+    let query=allQuerys.insertProject;
     connect.query(query,[project_name,project_version,userid,currentDateAndTime,currentDateAndTime],async(err,result)=>
     {
         console.log(query);
@@ -466,7 +675,8 @@ app.post('/project',async(req,res)=>
             {
                 "statusCode" :500,
                 "error": err.stack,
-                "message":"error while executing the query"
+                // "message":"error while executing the query"
+                "message":messages.QueryError
             }
             let jsonContent = JSON.stringify(responseData);
             res.end(jsonContent);
@@ -477,7 +687,8 @@ app.post('/project',async(req,res)=>
              let responseData=
                 {
                 "statusCode":200,
-                "message":"Project inserted successfully"
+                // "message":"Project inserted successfully"
+                "message":messages.insertProjects
                 };
                 let jsonContent = JSON.stringify(responseData);
                 res.end(jsonContent);
@@ -490,7 +701,8 @@ catch(err)
     let message="";
     if(err.name=="TokenExpiredError")
     {
-       message="Token expired please login again";
+    //    message="Token expired please login again";
+    message=messages.TokenExpiredError;
     }
     else if(err.name=="JsonWebTokenError")
     {
@@ -510,13 +722,13 @@ catch(err)
 
 }
 })
-app.put('/project',async(req,res)=>
+app.put(apiModules.adminProject,async(req,res)=>
 {
     try 
     {
-        var authorizationKey = req.headers['authorization'];
-        var token=authorizationKey.split(" ")[1];
-        console.log(token);
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // console.log(token);
         let now= new Date();
         let currentDateAndTime = date.format(now,'DD-MM-YYYY HH:MM:SS');
         var con=await Connection();
@@ -538,16 +750,17 @@ app.put('/project',async(req,res)=>
         //         return await decoded;
         //     }
         // })
-        var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
-    var userid=decoded.userid;
-    var roleId=decoded.roleid;
+        // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+    // var userid=decoded.userid;
+    // var roleId=decoded.roleid;
     console.log("the userid in access token "+userid);
     let data=req.body;
     let firstproject_name=data.project_name;
     let project_version=data.project_version;
-    var id=data.id;
+    var id=req.query.id;
     let profilePic="";
-    let query="update projects set project_name=?,project_version=?,updated_on=? where id=?"; 
+    // let query="update projects set project_name=?,project_version=?,updated_on=? where id=?"; 
+    let query=allQuerys.updtaeProject;
     connect.query(query,[firstproject_name,project_version,currentDateAndTime,id],async(err,result)=>
     {
         if(err)
@@ -556,7 +769,8 @@ app.put('/project',async(req,res)=>
             {
                 "statusCode" :500,
                 "error": err.stack,
-                "message":"error while executing the query"
+                // "message":"error while executing the query"
+                "message":messages.QueryError
             }
             let jsonContent = JSON.stringify(responseData);
             res.end(jsonContent);
@@ -567,7 +781,8 @@ app.put('/project',async(req,res)=>
             responseData=
             {
             "statusCode":200,
-            "message":"Project details updated successfully"
+            // "message":"Project details updated successfully"
+            "message":messages.deleteProject
             };
             const jsonContent = JSON.stringify(responseData);
                         res.end(jsonContent);
@@ -600,12 +815,12 @@ app.put('/project',async(req,res)=>
 
     }
 })
-app.delete('/project',async(req,res)=>
+app.delete(apiModules.adminProject,async(req,res)=>
 {
     try{
-        var authorizationKey = req.headers['authorization'];
-        var token=authorizationKey.split(" ")[1];
-        console.log(token);
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // console.log(token);
         var con=await Connection();
         var connect=con.connection;
         //  var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm},async(err, decoded)=>
@@ -625,13 +840,14 @@ app.delete('/project',async(req,res)=>
         //         return await decoded;
         //     }
         // })
-        var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
-        // var userId=req.query.UserId;
-        var userId=decoded.userid;
-        var roleId=decoded.roleid;
+        // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+        // // var userId=req.query.UserId;
+        // var userId=decoded.userid;
+        // var roleId=decoded.roleid;
         let id=req.query.id;
         // console.log("the userid in access token "+userId);
-        let query="delete from projects where id= ?";
+        // let query="delete from projects where id= ?";
+        let query=allQuerys.deleteProject;
         connect.query(query,[id],async(err,queryResults)=>
         {
             if(err)
@@ -640,7 +856,8 @@ app.delete('/project',async(req,res)=>
             {
                 "statusCode" :500,
                 "error": err.stack,
-                "message":"Error while executing the query"
+                // "message":"Error while executing the query"
+                "message":messages.QueryError
             }
             let jsonContent = JSON.stringify(responseData);
             res.end(jsonContent);
@@ -648,8 +865,9 @@ app.delete('/project',async(req,res)=>
             else{
                 responseData=
                 {
-                    "statusCode":404,
-                     "message":"Project deleted successfully",
+                    "statusCode":200,
+                    //  "message":"Project deleted successfully"
+                    
                 };
                 const jsonContent = JSON.stringify(responseData);
                 res.end(jsonContent);
@@ -683,24 +901,26 @@ app.delete('/project',async(req,res)=>
     
 
 })
-app.get('/project',async(req,res)=>
+app.get(apiModules.adminProject,async(req,res)=>
 {
     try{
-        var authorizationKey = req.headers['authorization'];
-        var token=authorizationKey.split(" ")[1];
-        console.log(token);
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // console.log(token);
         console.log(req.headers);
-        console.log("the ******************"+token);
+        // console.log("the ******************"+token);
         var con=await Connection();
         var connect=con.connection;
-        var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
-        console.log(decoded);
-        console.log(decoded.roleid+decoded.userid);
-        var roleId=decoded.roleid;
-        var userid=decoded.userid;
+        // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+        // console.log(decoded);
+        // console.log(decoded.roleid+decoded.userid);
+        // var roleId=decoded.roleid;
+        // var userid=decoded.userid;
         console.log("the userid in access token "+userid);
-        let queryForAll="SELECT projects.*,users.user_name as createdUserName FROM projects inner join users";
-        let queryForparticularUsrer="select id,project_name,project_version from projects where created_by =?";
+        // let queryForAll="SELECT projects.*,users.user_name as createdUserName FROM projects inner join users";
+        let queryForAll=allQuerys.getProjectsForAllDetails;
+        // let queryForparticularUsrer="select id,project_name,project_version from projects where created_by =?";
+        let queryForparticularUsrer=allQuerys.getProjectsForparticularUsrer;
         if(roleId==1)
         {
             connect.query(queryForAll,(err,result)=>
@@ -732,7 +952,7 @@ app.get('/project',async(req,res)=>
                         responseData=
                          {
                              "statusCode" :200,
-                             "message":"Listing of projects succesfully",
+                             "message":"Listing of projects successfully",
                             "data":result
                          }
                     }
@@ -774,7 +994,7 @@ app.get('/project',async(req,res)=>
                      responseData=
                       {
                           "statusCode" :200,
-                          "message":"Listing of projects succesfully",
+                          "message":"Listing of projects successfully",
                          "data":result
                       }
                  }
@@ -808,22 +1028,461 @@ catch(err)
         
 }
 })
-app.post('/user_details_service',async(req,res)=>
+app.post(apiModules.userProject,async(req,res)=>
 {
     try
     {
         var con=await Connection();
         var connect=con.connection;
-        var authorizationKey = req.headers['authorization'];
-        var token=authorizationKey.split(" ")[1];
-        console.log(token);
-        var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
-        var userid=decoded.userid;
-        var roleId=decoded.roleid;
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // console.log(token);
+    // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm},async(err, decoded)=>
+    // {
+    //     if(err)
+    //     {
+    //         responseData=
+    //         {
+    //             "statusCode" :500,
+    //             "message":"invalid accesstoken"
+    //         }
+    //         let jsonContent = JSON.stringify(responseData);
+    //         res.end(jsonContent);
+    //     }
+
+    //     else{
+    //         return await decoded;
+    //     }
+    // })
+    // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+    // var userid=decoded.userid;
+    // var roleId=decoded.roleid;
+    console.log("the userid in access token "+userid);
+    let data=req.body;
+    let project_name=data.project_name;
+    let project_version=data.project_version;
+    let now= new Date();
+    let currentDateAndTime = date.format(now,'DD-MM-YYYY HH:MM:SS');
+    // let query="insert into projects(project_name,project_version,created_by,created_on,updated_on)values(?,?,?,?,?)"; 
+    let query=allQuerys.insertProject;
+    connect.query(query,[project_name,project_version,userid,currentDateAndTime,currentDateAndTime],async(err,result)=>
+    {
+        console.log(query);
+        if(err)
+        {
+            responseData=
+            {
+                "statusCode" :500,
+                "error": err.stack,
+                // "message":"error while executing the query"
+                "message":messages.QueryError
+            }
+            let jsonContent = JSON.stringify(responseData);
+            res.end(jsonContent);
+        }
+        else
+        {
+            
+             let responseData=
+                {
+                "statusCode":200,
+                // "message":"Project inserted successfully"
+                "message":messages.insertProjects
+                };
+                let jsonContent = JSON.stringify(responseData);
+                res.end(jsonContent);
+        }
+
+    })
+}
+catch(err)
+{
+    let message="";
+    if(err.name=="TokenExpiredError")
+    {
+    //    message="Token expired please login again";
+    message=messages.TokenExpiredError;
+    }
+    else if(err.name=="JsonWebTokenError")
+    {
+        message=err.message;//please contact admin
+    }
+    console.log(err);
+    console.log(err.message);
+    console.log(err.name);
+    responseData=
+        {
+            "statusCode":401,
+             "message":message,
+        };
+        const jsonContent = JSON.stringify(responseData);
+        res.status(401).end(jsonContent);
+        
+
+}
+})
+app.put(apiModules.userProject,async(req,res)=>
+{
+    try 
+    {
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // console.log(token);
+        let now= new Date();
+        let currentDateAndTime = date.format(now,'DD-MM-YYYY HH:MM:SS');
+        var con=await Connection();
+        var connect=con.connection;
+        // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm},async(err, decoded)=>
+        // {
+        //     if(err)
+        //     {
+        //         responseData=
+        //         {
+        //             "statusCode" :500,
+        //             "message":"Invalid accesstoken"
+        //         }
+        //         let jsonContent = JSON.stringify(responseData);
+        //         res.end(jsonContent);
+        //     }
+    
+        //     else{
+        //         return await decoded;
+        //     }
+        // })
+        // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+    // var userid=decoded.userid;
+    // var roleId=decoded.roleid;
+    console.log("the userid in access token "+userid);
+    let data=req.body;
+    let firstproject_name=data.project_name;
+    let project_version=data.project_version;
+    var id=req.query.id;
+    let profilePic="";
+    // let query="update projects set project_name=?,project_version=?,updated_on=? where id=?"; 
+    let query=allQuerys.updtaeProject;
+    connect.query(query,[firstproject_name,project_version,currentDateAndTime,id],async(err,result)=>
+    {
+        if(err)
+        {
+            responseData=
+            {
+                "statusCode" :500,
+                "error": err.stack,
+                // "message":"error while executing the query"
+                "message":messages.QueryError
+            }
+            let jsonContent = JSON.stringify(responseData);
+            res.end(jsonContent);
+
+        }
+        else{
+
+            responseData=
+            {
+            "statusCode":200,
+            // "message":"Project details updated successfully"
+            "message":messages.deleteProject
+            };
+            const jsonContent = JSON.stringify(responseData);
+                        res.end(jsonContent);
+        }
+
+    })
+    } 
+    catch (err) 
+    {
+        let message="";
+    if(err.name=="TokenExpiredError")
+    {
+       message="Token expired please login again";
+    }
+    else if(err.name=="JsonWebTokenError")
+    {
+        message=err.message;//please contact admin
+    }
+    console.log(err);
+    console.log(err.message);
+    console.log(err.name);
+    responseData=
+        {
+            "statusCode":401,
+             "message":message,
+        };
+        const jsonContent = JSON.stringify(responseData);
+        res.status(401).end(jsonContent);
+        
+
+    }
+})
+app.delete(apiModules.userProject,async(req,res)=>
+{
+    try{
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // console.log(token);
+        var con=await Connection();
+        var connect=con.connection;
+        //  var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm},async(err, decoded)=>
+        // {
+        //     if(err)
+        //     {
+        //         responseData=
+        //         {
+        //             "statusCode" :500,
+        //             "message":"Invalid accesstoken"
+        //         }
+        //         let jsonContent = JSON.stringify(responseData);
+        //         res.end(jsonContent);
+        //     }
+    
+        //     else{
+        //         return await decoded;
+        //     }
+        // })
+        // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+        // // var userId=req.query.UserId;
+        // var userId=decoded.userid;
+        // var roleId=decoded.roleid;
+        let id=req.query.id;
+        // console.log("the userid in access token "+userId);
+        // let query="delete from projects where id= ?";
+        let query=allQuerys.deleteProject;
+        connect.query(query,[id],async(err,queryResults)=>
+        {
+            if(err)
+            {
+                responseData=
+            {
+                "statusCode" :500,
+                "error": err.stack,
+                // "message":"Error while executing the query"
+                "message":messages.QueryError
+            }
+            let jsonContent = JSON.stringify(responseData);
+            res.end(jsonContent);
+            }
+            else{
+                responseData=
+                {
+                    "statusCode":200,
+                    //  "message":"Project deleted successfully"
+                    
+                };
+                const jsonContent = JSON.stringify(responseData);
+                res.end(jsonContent);
+            }
+        })
+    }
+    catch(err){
+        let message="";
+        if(err.name=="TokenExpiredError")
+        {
+           message="Token expired please login again";
+        }
+        else if(err.name=="JsonWebTokenError")
+        {
+            message=err.message;//please contact admin
+        }
+        console.log(err);
+        console.log(err.message);
+        console.log(err.name);
+        responseData=
+            {
+                "statusCode":401,
+                 "message":message,
+            };
+            const jsonContent = JSON.stringify(responseData);
+            res.status(401).end(jsonContent);
+            
+    }
+
+    
+    
+
+})
+app.get(apiModules.userProject,async(req,res)=>
+{
+    try{
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // console.log(token);
+        console.log(req.headers);
+        console.log("the ******************"+token);
+        var con=await Connection();
+        var connect=con.connection;
+        // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+        // console.log(decoded);
+        // console.log(decoded.roleid+decoded.userid);
+        // var roleId=decoded.roleid;
+        // var userid=decoded.userid;
+        console.log("the userid in access token "+userid);
+        // let queryForAll="SELECT projects.*,users.user_name as createdUserName FROM projects inner join users";
+        let queryForAll=allQuerys.getProjectsForAllDetails;
+        // let queryForparticularUsrer="select id,project_name,project_version from projects where created_by =?";
+        let queryForparticularUsrer=allQuerys.getProjectsForparticularUsrer;
+        if(roleId==1)
+        {
+            connect.query(queryForAll,(err,result)=>
+            {
+               if(err)
+               {
+                responseData=
+                {
+                    "statusCode" :500,
+                    "error": err.stack,
+                    "message":"Error while executing the query"
+                }
+                let jsonContent = JSON.stringify(responseData);
+                res.end(jsonContent)
+
+               }
+               else{
+                    let responseData="";
+                    if(result.length==0)
+                    {
+                        responseData=
+                        {
+                            "statusCode" :200,
+                            "message":"No projects found"                    
+                        }
+                    }
+                    else
+                    {
+                        responseData=
+                         {
+                             "statusCode" :200,
+                             "message":"Listing of projects successfully",
+                            "data":result
+                         }
+                    }
+                    let jsonContent = JSON.stringify(responseData);
+                    res.end(jsonContent);
+               }
+
+            }
+        )
+        }
+        else
+        {
+           connect.query(queryForparticularUsrer,[userid],function(err,result) 
+           {
+            if(err)
+            {
+             responseData=
+             {
+                 "statusCode" :500,
+                 "error": err.stack,
+                 "message":"error while executing the query"
+             }
+             let jsonContent = JSON.stringify(responseData);
+             res.end(jsonContent)
+
+            }
+            else{
+                 let responseData="";
+                 if(result.length==0)
+                 {
+                     responseData=
+                     {
+                         "statusCode" :200,
+                         "message":"No projects found"                    
+                     }
+                 }
+                 else
+                 {
+                     responseData=
+                      {
+                          "statusCode" :200,
+                          "message":"Listing of projects successfully",
+                         "data":result
+                      }
+                 }
+                 let jsonContent = JSON.stringify(responseData);
+                 res.end(jsonContent);
+            }
+           })
+        }
+    }
+catch(err)
+{
+    let message="";
+    if(err.name=="TokenExpiredError")
+    {
+       message="Token expired please login again";
+    }
+    else if(err.name=="JsonWebTokenError")
+    {
+        message=err.message;//please contact admin
+    }
+    console.log(err);
+    console.log(err.message);
+    console.log(err.name);
+    responseData=
+        {
+            "statusCode":401,
+             "message":message,
+        };
+        const jsonContent = JSON.stringify(responseData);
+        res.status(401).end(jsonContent);
+        
+}
+})
+app.post(apiModules.userDetailsServiceforAdmin,async(req,res)=>
+{
+    try
+    {
+        console.log("++++++++++++++++++++++++++++++*****enter****++++++++++++++++++++++++++++++++++++++++++");
+        var con=await Connection();
+        var connect=con.connection;
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // console.log(token);
+        // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+        // var userid=decoded.userid;
+        // var roleId=decoded.roleid;
         console.log("the userid in access token "+userid);
         let data=req.body;
         let firstName=data.firstName;
         let lastName=data.lastName;
+                let checkFname=validator.isAlpha(firstName);
+                let checkLname=validator.isAlpha(lastName);
+                console.log(checkFname);
+                console.log(checkLname);
+                let fnLength=validator.isMaxLength(firstName,50,min_length=2);
+                let lnLength=validator.isMaxLength(lastName,50,min_length=2);
+                // if(checkFname==false||checkLname==false||fnLength==false||lnLength==false)
+                //     {
+                //      let responseData=
+                //         {
+                //          "statusCode" :202,
+                //         "message":"Enter valid First Name and Last Name "
+                //         }                 
+                //         let jsonContent = JSON.stringify(responseData);
+                //         res.end(jsonContent);
+                //      return res;
+                //     }
+                if(checkFname==false||checkLname==false)
+                    {
+                     let responseData=
+                        {
+                         "statusCode" :202,
+                        "message":"First Name and last Name accepts only alphabets "
+                        }                 
+                        let jsonContent = JSON.stringify(responseData);
+                        res.end(jsonContent);
+                     return res;
+                    }
+                    if(firstName.length<2||firstName.length>=50||lastName.length<2||lastName.length>=50)
+                    {
+                        let responseData=
+                        {
+                         "statusCode" :202,
+                        "message":"Enter first name and last name range in between 3 to 50 chnaracter only "
+                        }                 
+                        let jsonContent = JSON.stringify(responseData);
+                        res.end(jsonContent);
+                     return res;
+                    }
         let profile_pic="";
         let now= new Date();
         let currentDateAndTime = date.format(now,'DD-MM-YYYY HH:MM:SS');
@@ -831,7 +1490,8 @@ app.post('/user_details_service',async(req,res)=>
         console.log(details+"!!!!!!!!!!!!!!!!!!!");
         if(details==0)
         {
-        let query="insert into user_details(user_id,first_name,last_name,created_on,updated_on)values(?,?,?,?,?)"; 
+        // let query="insert into user_details(user_id,first_name,last_name,created_on,updated_on)values(?,?,?,?,?)"; 
+        let query=allQuerys.insertUserDetails;
         connect.query(query,[userid,firstName,lastName,currentDateAndTime,currentDateAndTime],async(err,result)=>
         {
          console.log(query);
@@ -862,7 +1522,8 @@ app.post('/user_details_service',async(req,res)=>
     }
         else
         {
-    let query="update user_details set first_name=?,last_name=?,updated_on=? where user_id=?"; 
+    // let query="update user_details set first_name=?,last_name=?,updated_on=? where user_id=?"; 
+    let query=allQuerys.updtaeUserDetails;
     connect.query(query,[firstName,lastName,currentDateAndTime,userid],async(err,result)=>
     {
         if(err)
@@ -916,29 +1577,67 @@ catch(err)
         
 }
 })
-app.put('/user_details_service',async(req,res)=>
+app.put(apiModules.userDetailsServiceforAdmin,async(req,res)=>
 {
     try 
     {
-        var authorizationKey = req.headers['authorization'];
-        var token=authorizationKey.split(" ")[1];
-        console.log(token);
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // console.log(token);
         let now= new Date();
         let currentDateAndTime = date.format(now,'DD-MM-YYYY HH:MM:SS');
         var con=await Connection();
         var connect=con.connection;
-        var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
-        var userid=decoded.userid;
-        var roleId=decoded.roleid;
-    console.log("the userid in access token "+userid);
-    let data=req.body;
-    let firstName=data.firstName;
-    let lastName=data.lastName;
-    let id=data.id;
-    let profilePic="";
-    let query="update user_details set first_name=?,last_name=?,updated_on=? where id=?"; 
-    connect.query(query,[firstName,lastName,currentDateAndTime,id],async(err,result)=>
-    {
+        // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+        // var userid=decoded.userid;
+        // var roleId=decoded.roleid;
+        console.log("the userid in access token "+userid);
+        let data=req.body;
+        let firstName=data.firstName;
+        let lastName=data.lastName;
+        let checkFname=validator.isAlpha(firstName);
+                let checkLname=validator.isAlpha(lastName);
+                let fnLength=validator.isMaxLength(firstName,50,min_length=2);
+                let lnLength=validator.isMaxLength(lastName,50,min_length=2);
+                // if(checkFname==false||checkLname==false||fnLength==false||lnLength==false)
+                //     {
+                //      let responseData=
+                //         {
+                //          "statusCode" :202,
+                //         "message":"Enter valid First Name and Last Name "
+                //         }                 
+                //         let jsonContent = JSON.stringify(responseData);
+                //         res.end(jsonContent);
+                //      return res;
+                //     }
+                if(checkFname==false||checkLname==false)
+                    {
+                     let responseData=
+                        {
+                         "statusCode" :202,
+                        "message":"First Name and last Name accepts only alphabets "
+                        }                 
+                        let jsonContent = JSON.stringify(responseData);
+                        res.end(jsonContent);
+                     return res;
+                    }
+                    if(firstName.length<2||firstName.length>=50||lastName.length<2||lastName.length>=50)
+                    {
+                        let responseData=
+                        {
+                         "statusCode" :202,
+                        "message":"Enter first name and last name range in between 3 to 50 chnaracter only "
+                        }                 
+                        let jsonContent = JSON.stringify(responseData);
+                        res.end(jsonContent);
+                     return res;
+                    }
+        let id=req.query.id;
+        let profilePic="";
+        // let query="update user_details set first_name=?,last_name=?,updated_on=? where id=?"; 
+        let query=allQuerys.updtaeUserDetails;
+        connect.query(query,[firstName,lastName,currentDateAndTime,id],async(err,result)=>
+     {
         if(err)
         {
             responseData=
@@ -989,21 +1688,22 @@ app.put('/user_details_service',async(req,res)=>
 
     }
 })
-app.delete('/user_details_service',async(req,res)=>
+app.delete(apiModules.userDetailsServiceforAdmin,async(req,res)=>
 {
     try{
-        var authorizationKey = req.headers['authorization'];
-        var token=authorizationKey.split(" ")[1];
-        console.log(token);
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // console.log(token);
         var con=await Connection();
         var connect=con.connection;
-        var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+        // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
         // var userId=req.query.UserId;
-        var userId=decoded.userid;
-        var roleId=decoded.roleid;
+        // var userId=decoded.userid;
+        // var roleId=decoded.roleid;
         let id=req.query.id;
         // console.log("the userid in access token "+userId);
-        let query="delete from user_details where id= ?";
+        // let query="delete from user_details where id= ?";
+        let query=allQuerys.deleteUserDetails;
         connect.query(query,[id],async(err,queryResults)=>
         {
             if(err)
@@ -1055,14 +1755,14 @@ app.delete('/user_details_service',async(req,res)=>
     }
 
 })
-app.get('/user_details_service',async(req,res)=>
+app.get(apiModules.userDetailsServiceforAdmin,async(req,res)=>
 {
     try{
-        var authorizationKey = req.headers['authorization'];
-        var token=authorizationKey.split(" ")[1];
-        console.log(token);
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // console.log(token);
         console.log(req.headers);
-        console.log("the ******************"+token);
+        // console.log("the ******************"+token);
         var con=await Connection();
         var connect=con.connection;
     // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm},async(err, decoded)=>
@@ -1081,14 +1781,15 @@ app.get('/user_details_service',async(req,res)=>
     //             return await decoded;
     //         }
     //     })
-    var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
-        console.log(decoded);
-        console.log(decoded.roleid+decoded.userid);
-        var roleId=decoded.roleid;
-        var userid=decoded.userid;
+    // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+    //     console.log(decoded);
+    //     console.log(decoded.roleid+decoded.userid);
+    //     var roleId=decoded.roleid;
+    //     var userid=decoded.userid;
         console.log("the userid in access token "+userid);
-        let queryForAll="select id,user_id,first_name,last_name,profile_pic from user_details where user_id=?";
-         connect.query(queryForAll,[userid],(err,result)=>
+        // let queryForAll="select id,user_id,first_name,last_name,profile_pic from user_details where user_id=?";
+        let queryForAll=allQuerys.getUserDetails; 
+        connect.query(queryForAll,[userid],(err,result)=>
             {
                if(err)
                {
@@ -1156,18 +1857,448 @@ catch(err)
         
 }
 })
-app.post('/uploadProfilepic',async(req,res)=>
+app.post(apiModules.userDetailsServiceforUser,async(req,res)=>
+{
+    try
+    {
+        console.log("++++++++++++++++++++++++++++++*****enter****++++++++++++++++++++++++++++++++++++++++++");
+        var con=await Connection();
+        var connect=con.connection;
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // console.log(token);
+        // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+        // var userid=decoded.userid;
+        // var roleId=decoded.roleid;
+        console.log("the userid in access token "+userid);
+        let data=req.body;
+        let firstName=data.firstName;
+        let lastName=data.lastName;
+                let checkFname=validator.isAlpha(firstName);
+                let checkLname=validator.isAlpha(lastName);
+                console.log(checkFname);
+                console.log(checkLname);
+                let fnLength=validator.isMaxLength(firstName,50,min_length=2);
+                let lnLength=validator.isMaxLength(lastName,50,min_length=2);
+                // if(checkFname==false||checkLname==false||fnLength==false||lnLength==false)
+                //     {
+                //      let responseData=
+                //         {
+                //          "statusCode" :202,
+                //         "message":"Enter valid First Name and Last Name "
+                //         }                 
+                //         let jsonContent = JSON.stringify(responseData);
+                //         res.end(jsonContent);
+                //      return res;
+                //     }
+                if(checkFname==false||checkLname==false)
+                    {
+                     let responseData=
+                        {
+                         "statusCode" :202,
+                        "message":"First Name and last Name accepts only alphabets "
+                        }                 
+                        let jsonContent = JSON.stringify(responseData);
+                        res.end(jsonContent);
+                     return res;
+                    }
+                    if(firstName.length<2||firstName.length>=50||lastName.length<2||lastName.length>=50)
+                    {
+                        let responseData=
+                        {
+                         "statusCode" :202,
+                        "message":"Enter first name and last name range in between 3 to 50 chnaracter only "
+                        }                 
+                        let jsonContent = JSON.stringify(responseData);
+                        res.end(jsonContent);
+                     return res;
+                    }
+        let profile_pic="";
+        let now= new Date();
+        let currentDateAndTime = date.format(now,'DD-MM-YYYY HH:MM:SS');
+        let details=await userMailCheck.checkUserDetails(userid,con.db,con.connection);
+        console.log(details+"!!!!!!!!!!!!!!!!!!!");
+        if(details==0)
+        {
+        // let query="insert into user_details(user_id,first_name,last_name,created_on,updated_on)values(?,?,?,?,?)"; 
+        let query=allQuerys.insertUserDetails;
+        connect.query(query,[userid,firstName,lastName,currentDateAndTime,currentDateAndTime],async(err,result)=>
+        {
+         console.log(query);
+            if(err)
+            {
+              responseData=
+              {
+                "statusCode" :500,
+                "error": err.stack,
+                "message":"error while executing the query"
+               }
+                let jsonContent = JSON.stringify(responseData);
+                res.end(jsonContent);
+            }
+            else
+            {
+            
+             let responseData=
+                {
+                "statusCode":200,
+                "message":"User details inserted successfully"
+                };
+                let jsonContent = JSON.stringify(responseData);
+                res.end(jsonContent);
+        }
+
+    })
+    }
+        else
+        {
+    // let query="update user_details set first_name=?,last_name=?,updated_on=? where user_id=?"; 
+    let query=allQuerys.updtaeUserDetails;
+    connect.query(query,[firstName,lastName,currentDateAndTime,userid],async(err,result)=>
+    {
+        if(err)
+        {
+            responseData=
+            {
+                "statusCode" :500,
+                "error": err.stack,
+                "message":"error while executing the query"
+            }
+            let jsonContent = JSON.stringify(responseData);
+            res.end(jsonContent);
+
+        }
+        else{
+
+            responseData=
+            {
+            "statusCode":200,
+            "message":"User details updated successfully"
+            };
+            const jsonContent = JSON.stringify(responseData);
+                        res.end(jsonContent);
+        }
+
+    })
+
+}
+}
+catch(err)
+{
+    let message="";
+    if(err.name=="TokenExpiredError")
+    {
+       message="Token expired please login again";
+    }
+    else if(err.name=="JsonWebTokenError")
+    {
+        message=err.message;//please contact admin
+    }
+    console.log(err);
+    console.log(err.message);
+    console.log(err.name);
+    responseData=
+        {
+            "statusCode":401,
+             "message":message,
+        };
+        const jsonContent = JSON.stringify(responseData);
+        res.status(401).end(jsonContent);
+        
+}
+})
+app.put(apiModules.userDetailsServiceforUser,async(req,res)=>
+{
+    try 
+    {
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // console.log(token);
+        let now= new Date();
+        let currentDateAndTime = date.format(now,'DD-MM-YYYY HH:MM:SS');
+        var con=await Connection();
+        var connect=con.connection;
+        // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+        // var userid=decoded.userid;
+        // var roleId=decoded.roleid;
+        console.log("the userid in access token "+userid);
+        let data=req.body;
+        let firstName=data.firstName;
+        let lastName=data.lastName;
+        let checkFname=validator.isAlpha(firstName);
+                let checkLname=validator.isAlpha(lastName);
+                let fnLength=validator.isMaxLength(firstName,50,min_length=2);
+                let lnLength=validator.isMaxLength(lastName,50,min_length=2);
+                // if(checkFname==false||checkLname==false||fnLength==false||lnLength==false)
+                //     {
+                //      let responseData=
+                //         {
+                //          "statusCode" :202,
+                //         "message":"Enter valid First Name and Last Name "
+                //         }                 
+                //         let jsonContent = JSON.stringify(responseData);
+                //         res.end(jsonContent);
+                //      return res;
+                //     }
+                if(checkFname==false||checkLname==false)
+                    {
+                     let responseData=
+                        {
+                         "statusCode" :202,
+                        "message":"First Name and last Name accepts only alphabets "
+                        }                 
+                        let jsonContent = JSON.stringify(responseData);
+                        res.end(jsonContent);
+                     return res;
+                    }
+                    if(firstName.length<2||firstName.length>=50||lastName.length<2||lastName.length>=50)
+                    {
+                        let responseData=
+                        {
+                         "statusCode" :202,
+                        "message":"Enter first name and last name range in between 3 to 50 chnaracter only "
+                        }                 
+                        let jsonContent = JSON.stringify(responseData);
+                        res.end(jsonContent);
+                     return res;
+                    }
+        let id=req.query.id;
+        let profilePic="";
+        // let query="update user_details set first_name=?,last_name=?,updated_on=? where id=?"; 
+        let query=allQuerys.updtaeUserDetails;
+        connect.query(query,[firstName,lastName,currentDateAndTime,id],async(err,result)=>
+     {
+        if(err)
+        {
+            responseData=
+            {
+                "statusCode" :500,
+                "error": err.stack,
+                "message":"error while executing the query"
+            }
+            let jsonContent = JSON.stringify(responseData);
+            res.end(jsonContent);
+
+        }
+        else{
+
+            responseData=
+            {
+            "statusCode":200,
+            "message":"User details updated successfully"
+            };
+            const jsonContent = JSON.stringify(responseData);
+                        res.end(jsonContent);
+        }
+
+    })
+    } 
+    catch (err) 
+    {
+        let message="";
+    if(err.name=="TokenExpiredError")
+    {
+       message="Token expired please login again";
+    }
+    else if(err.name=="JsonWebTokenError")
+    {
+        message=err.message;//please contact admin
+    }
+    console.log(err);
+    console.log(err.message);
+    console.log(err.name);
+    responseData=
+        {
+            "statusCode":401,
+             "message":message,
+        };
+        const jsonContent = JSON.stringify(responseData);
+        res.status(401).end(jsonContent);
+        
+
+    }
+})
+app.delete(apiModules.userDetailsServiceforUser,async(req,res)=>
+{
+    try{
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // console.log(token);
+        var con=await Connection();
+        var connect=con.connection;
+        // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+        // var userId=req.query.UserId;
+        // var userId=decoded.userid;
+        // var roleId=decoded.roleid;
+        let id=req.query.id;
+        // console.log("the userid in access token "+userId);
+        // let query="delete from user_details where id= ?";
+        let query=allQuerys.deleteUserDetails;
+        connect.query(query,[id],async(err,queryResults)=>
+        {
+            if(err)
+            {
+                responseData=
+            {
+                "statusCode" :500,
+                "error": err.stack,
+                "message":"Error while executing the query"
+            }
+            let jsonContent = JSON.stringify(responseData);
+            res.end(jsonContent);
+            }
+            else{
+                responseData=
+                {
+                    "statusCode":404,
+                     "message":"User details deleted successfully",
+                };
+                const jsonContent = JSON.stringify(responseData);
+                res.end(jsonContent);
+            }
+        })
+    }
+    catch(err){
+        let message="";
+        if(err.name=="TokenExpiredError")
+        {
+           message="Token expired please login again";
+        }
+        else if(err.name=="JsonWebTokenError")
+        {
+            message=err.message;//please contact admin
+        }
+        else{
+            message=err.message;
+        }
+        console.log(err);
+        console.log(err.message);
+        console.log(err.name);
+        responseData=
+            {
+                "statusCode":401,
+                 "message":message,
+            };
+            const jsonContent = JSON.stringify(responseData);
+            res.status(401).end(jsonContent);
+            
+    }
+
+})
+app.get(apiModules.userDetailsServiceforUser,async(req,res)=>
+{
+    try{
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // console.log(token);
+        console.log(req.headers);
+        // console.log("the ******************"+token);
+        var con=await Connection();
+        var connect=con.connection;
+    // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm},async(err, decoded)=>
+    //     {
+    //         if(err)
+    //         {
+    //             responseData=
+    //             {
+    //                 "statusCode" :500,
+    //                 "message":"Invalid accesstoken"
+    //             }
+    //             let jsonContent = JSON.stringify(responseData);
+    //             res.end(jsonContent);
+    //         }    
+    //         else{
+    //             return await decoded;
+    //         }
+    //     })
+    // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+    //     console.log(decoded);
+    //     console.log(decoded.roleid+decoded.userid);
+    //     var roleId=decoded.roleid;
+    //     var userid=decoded.userid;
+        console.log("the userid in access token "+userid);
+        // let queryForAll="select id,user_id,first_name,last_name,profile_pic from user_details where user_id=?";
+        let queryForAll=allQuerys.getUserDetails; 
+        connect.query(queryForAll,[userid],(err,result)=>
+            {
+               if(err)
+               {
+                responseData=
+                {
+                    "statusCode" :500,
+                    "error": err.stack,
+                    "message":"Error while executing the query"
+                }
+                let jsonContent = JSON.stringify(responseData);
+                res.end(jsonContent)
+
+               }
+               else{
+                    let responseData="";
+                    if(result.length==0)
+                    {
+                        responseData=
+                        {
+                            "statusCode" :200,
+                            "message":"No user details found"                    
+                        }
+                    }
+                    else
+                    {
+                        responseData=
+                         {
+                             "statusCode" :200,
+                             "message":"Listing of user details succesfully",
+                            "data":result
+                         }
+                    }
+                    let jsonContent = JSON.stringify(responseData);
+                    res.end(jsonContent);
+               }
+
+            }
+        )
+        
+    }
+catch(err)
+{
+    let message="";
+    if(err.name=="TokenExpiredError")
+    {
+       message="Token expired please login again";
+    }
+    else if(err.name=="JsonWebTokenError")
+    {
+        message=err.message;//please contact admin
+    }
+    else{
+        message=err.message;
+    }
+    console.log(err);
+    console.log(err.message);
+    console.log(err.name);
+    responseData=
+        {
+            "statusCode":401,
+             "message":message,
+        };
+        const jsonContent = JSON.stringify(responseData);
+        res.status(401).end(jsonContent);
+        
+}
+})
+app.post(apiModules.uploadProfirePicAdmin,async(req,res)=>
 {   
      try
         {
         console.log( req.ip);
         const ipAdd=req.socket.localAddress;
         let form = new formidable.IncomingForm();
-        var authorizationKey = req.headers['authorization'];
-        var token=authorizationKey.split(" ")[1];
-        var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
-        var userid=decoded.userid;
-        var roleId=decoded.roleid;
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+        // var userid=decoded.userid;
+        // var roleId=decoded.roleid;
         var con=await Connection();
         var connect=con.connection;
         let db=con.db;
@@ -1188,30 +2319,81 @@ app.post('/uploadProfilepic',async(req,res)=>
         form.parse(req, async function (err, fields, files) {
         var oldpath =await files.filetoupload.filepath;       
         var newpath = dir;
-        fs.readFile(files.filetoupload.filepath, function (err, data) 
+        // console.log(files);
+        console.log("---------------------------");
+        console.log(files.filetoupload.mimetype);
+        if(files.filetoupload.mimetype=='image/png'||files.filetoupload.mimetype=='image/jpg'||files.filetoupload.mimetype=='image/jpeg')
         {
-            if (err) throw err;
-            console.log('File read!');
-            fs.writeFile( newpath+"/"+userName+".png",data, function(err)
-            {
-                 if (err) throw err;
-                 let profilepicPath=PortId+"/images/"+userName+".png";
-                //  let profilepicPath=req.ip+port+"/images/"+userName+".png";
-                 console.log(profilepicPath);
-                 let queryForProfilepic="update user_details set profile_pic=? where user_id=?";
-                 connect.query(queryForProfilepic,[profilepicPath,userid]);
-                 console.log(profilepicPath);
-                 responseData=
+        //   let responseData=
+        //          {
+        //             "statusCode":201,
+        //             "message":"Upload only jpg,jpeg,png format pictures only"
+        //          };
+        //          const jsonContent = JSON.stringify(responseData);
+        //          res.status(201).end(jsonContent);
+        //          return res;
+
+                 fs.readFile(files.filetoupload.filepath, function (err, data) 
                  {
-                    "statusCode":200,
-                    "message":"profile pic uploaded successfully"
+                     if (err) throw err;
+                     console.log('File read!');
+                     fs.writeFile( newpath+"/"+userName+".png",data, function(err)
+                     {
+                          if (err) throw err;
+                          let profilepicPath=PortId+"/images/"+userName+".png";
+                         //  let profilepicPath=req.ip+port+"/images/"+userName+".png";
+                          console.log(profilepicPath);
+                          let queryForProfilepic="update user_details set profile_pic=? where user_id=?";
+                          connect.query(queryForProfilepic,[profilepicPath,userid]);
+                          console.log(profilepicPath);
+                          responseData=
+                          {
+                             "statusCode":200,
+                             "message":"profile pic uploaded successfully"
+         
+                          };
+                             const jsonContent = JSON.stringify(responseData);
+                             res.status(200).end(jsonContent);
+         
+                          });
+                     })
 
+
+        }
+        else
+        {
+            let responseData=
+                 {
+                    "statusCode":201,
+                    "message":"Upload only jpg,jpeg,png format pictures only"
                  };
-                    const jsonContent = JSON.stringify(responseData);
-                    res.status(200).end(jsonContent);
+                 const jsonContent = JSON.stringify(responseData);
+                 res.status(201).end(jsonContent);
+                   // fs.readFile(files.filetoupload.filepath, function (err, data) 
+        // {
+        //     if (err) throw err;
+        //     console.log('File read!');
+        //     fs.writeFile( newpath+"/"+userName+".png",data, function(err)
+        //     {
+        //          if (err) throw err;
+        //          let profilepicPath=PortId+"/images/"+userName+".png";
+        //         //  let profilepicPath=req.ip+port+"/images/"+userName+".png";
+        //          console.log(profilepicPath);
+        //          let queryForProfilepic="update user_details set profile_pic=? where user_id=?";
+        //          connect.query(queryForProfilepic,[profilepicPath,userid]);
+        //          console.log(profilepicPath);
+        //          responseData=
+        //          {
+        //             "statusCode":200,
+        //             "message":"profile pic uploaded successfully"
 
-                 });
-            })
+        //          };
+        //             const jsonContent = JSON.stringify(responseData);
+        //             res.status(200).end(jsonContent);
+
+        //          });
+        //     })
+        }
         })
     }
     catch(err)
@@ -1237,18 +2419,150 @@ app.post('/uploadProfilepic',async(req,res)=>
         res.status(401).end(jsonContent);
     }
 })
-app.post('/user_profile',async(req,res)=>
+app.post(apiModules.uploadProfirePicUser,async(req,res)=>
+{   
+     try
+        {
+        console.log( req.ip);
+        const ipAdd=req.socket.localAddress;
+        let form = new formidable.IncomingForm();
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+        // var userid=decoded.userid;
+        // var roleId=decoded.roleid;
+        var con=await Connection();
+        var connect=con.connection;
+        let db=con.db;
+        let userName=await userMailCheck.getUserName(userid,con.db,con.connection);
+        // let userNameQuery="select user_name from users where id=?";
+        // const result=await db.query(connect,userNameQuery,[userid]);
+        // console.log(result);
+        // let userName=await result[0].user_name;
+        console.log("the user name "+ userName);
+        var dir = './profilepic';
+        if (!fs.existsSync(dir)){
+       fs.mkdirSync(dir);
+        }  
+        //  var filepath=__dirname+"D:\NodeTasks\NodeProject\profilepicUploads";
+        const dirPath = path.join(__dirname, '/profilepic');
+        console.log("direction ");
+        console.log(dirPath);
+        form.parse(req, async function (err, fields, files) {
+        var oldpath =await files.filetoupload.filepath;       
+        var newpath = dir;
+        // console.log(files);
+        console.log("---------------------------");
+        console.log(files.filetoupload.mimetype);
+        if(files.filetoupload.mimetype=='image/png'||files.filetoupload.mimetype=='image/jpg'||files.filetoupload.mimetype=='image/jpeg')
+        {
+        //   let responseData=
+        //          {
+        //             "statusCode":201,
+        //             "message":"Upload only jpg,jpeg,png format pictures only"
+        //          };
+        //          const jsonContent = JSON.stringify(responseData);
+        //          res.status(201).end(jsonContent);
+        //          return res;
+
+                 fs.readFile(files.filetoupload.filepath, function (err, data) 
+                 {
+                     if (err) throw err;
+                     console.log('File read!');
+                     fs.writeFile( process.env.PATH_FOR_UPLOADpath+"/"+userName+".png",data, function(err)
+                     {
+                          if (err) throw err;
+                          let profilepicPath=PortId+"/images/"+userName+".png";
+                         //  let profilepicPath=req.ip+port+"/images/"+userName+".png";
+                          console.log(profilepicPath);
+                          let queryForProfilepic="update user_details set profile_pic=? where user_id=?";
+                          connect.query(queryForProfilepic,[profilepicPath,userid]);
+                          console.log(profilepicPath);
+                          responseData=
+                          {
+                             "statusCode":200,
+                             "message":"profile pic uploaded successfully"
+         
+                          };
+                             const jsonContent = JSON.stringify(responseData);
+                             res.status(200).end(jsonContent);
+         
+                          });
+                     })
+
+
+        }
+        else
+        {
+            let responseData=
+                 {
+                    "statusCode":201,
+                    "message":"Upload only jpg,jpeg,png format pictures only"
+                 };
+                 const jsonContent = JSON.stringify(responseData);
+                 res.status(201).end(jsonContent);
+                   // fs.readFile(files.filetoupload.filepath, function (err, data) 
+        // {
+        //     if (err) throw err;
+        //     console.log('File read!');
+        //     fs.writeFile( newpath+"/"+userName+".png",data, function(err)
+        //     {
+        //          if (err) throw err;
+        //          let profilepicPath=PortId+"/images/"+userName+".png";
+        //         //  let profilepicPath=req.ip+port+"/images/"+userName+".png";
+        //          console.log(profilepicPath);
+        //          let queryForProfilepic="update user_details set profile_pic=? where user_id=?";
+        //          connect.query(queryForProfilepic,[profilepicPath,userid]);
+        //          console.log(profilepicPath);
+        //          responseData=
+        //          {
+        //             "statusCode":200,
+        //             "message":"profile pic uploaded successfully"
+
+        //          };
+        //             const jsonContent = JSON.stringify(responseData);
+        //             res.status(200).end(jsonContent);
+
+        //          });
+        //     })
+        }
+        })
+    }
+    catch(err)
+    {
+        let message="";
+        if(err.name=="TokenExpiredError")
+        {
+            message="Token expired please login again";
+        }
+        else if(err.name=="JsonWebTokenError")
+        {
+            message=err.message;//please contact admin
+        }
+        console.log(err);
+        console.log(err.message);
+        console.log(err.name);
+        responseData=
+        {
+            "statusCode":401,
+             "message":message
+        };
+        const jsonContent = JSON.stringify(responseData);
+        res.status(401).end(jsonContent);
+    }
+})
+app.post(apiModules.userProfileAdmin,async(req,res)=>
 {
     try
     {       
         console.log(req.body);
         var con=await Connection();
         var connect=con.connection;
-        var authorizationKey = req.headers['authorization'];
-        var token=authorizationKey.split(" ")[1];
-        var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
-        var userid=decoded.userid;
-        var roleId=decoded.roleid;
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+        // var userid=decoded.userid;
+        // var roleId=decoded.roleid;
         console.log("the userid in access token "+userid);
         // let data=req.body;
         // let firstName=data.firstName;
@@ -1263,6 +2577,44 @@ app.post('/user_profile',async(req,res)=>
                 console.log(fields);
                 var firstName=fields.firstName
                 var lastName=fields.lastName;
+                let checkFname=validator.isAlpha(firstName);
+                let checkLname=validator.isAlpha(lastName);
+                let fnLength=validator.isMaxLength(firstName,50,min_length=2);
+                let lnLength=validator.isMaxLength(lastName,50,min_length=2);
+                if(checkFname==false||checkLname==false)
+                    {
+                     let responseData=
+                        {
+                         "statusCode" :202,
+                        "message":"First Name and last Name accepts only alphabets "
+                        }                 
+                        let jsonContent = JSON.stringify(responseData);
+                        res.end(jsonContent);
+                     return res;
+                    }
+                    if(firstName.length<2||firstName.length>=50||lastName.length<2||lastName.length>=50)
+                    {
+                        let responseData=
+                        {
+                         "statusCode" :202,
+                        "message":"Enter first name and last name range in between 3 to 50 chnaracter only "
+                        }                 
+                        let jsonContent = JSON.stringify(responseData);
+                        res.end(jsonContent);
+                     return res;
+                    }
+                    if(files.filetoupload.mimetype=='image/png'||files.filetoupload.mimetype=='image/jpg'||files.filetoupload.mimetype=='image/jpeg')
+                    {
+                        // let responseData=
+                        //     {
+                        //     "statusCode":201,
+                        //     "message":"Upload only jpg,jpeg,png format pictures only"
+                        //     };
+                        //     const jsonContent = JSON.stringify(responseData);
+                        //      res.status(201).end(jsonContent);
+                        //     return res;
+
+                    
                 console.log("the &&&&&&&&&&&&&&&&"+firstName);
                 var oldpath =await files.filetoupload.filepath;       
                 var newpath = dir;
@@ -1309,7 +2661,8 @@ app.post('/user_profile',async(req,res)=>
                             // console.log(resultsforinsertorupdate)
                             if(details==0)
                             {
-                             let query="insert into user_details(user_id,first_name,last_name,profile_pic,created_on,updated_on)values(?,?,?,?,?,?)"; 
+                            //  let query="insert into user_details(user_id,first_name,last_name,profile_pic,created_on,updated_on)values(?,?,?,?,?,?)"; 
+                            let query=allQuerys.insertUserDetailsWithProfilePic;
                             connect.query(query,[userid,firstName,lastName,profilepicPath,currentDateAndTime,currentDateAndTime],async(err,result)=>
                                  {
                                 console.log(query);
@@ -1339,7 +2692,8 @@ app.post('/user_profile',async(req,res)=>
                                 })
                             }
                             else{
-                                let query="update user_details set first_name=?,last_name=?,profile_pic=?,updated_on=? where user_id=?"; 
+                                // let query="update user_details set first_name=?,last_name=?,profile_pic=?,updated_on=? where user_id=?"; 
+                                let query=allQuerys.updtaeUserDetailswithProfilePic;
                                 connect.query(query,[firstName,lastName,profilepicPath,currentDateAndTime,userid],async(err,result)=>
                                     {
                                     console.log(query);
@@ -1374,6 +2728,18 @@ app.post('/user_profile',async(req,res)=>
                         });
                     }
                 })
+            }
+            else
+            {
+                let responseData=
+                {
+                "statusCode":201,
+                "message":"Upload only jpg,jpeg,png format pictures only"
+                };
+                const jsonContent = JSON.stringify(responseData);
+                 res.status(201).end(jsonContent);
+                return res;
+            }
             })
 }
 catch(err)
@@ -1403,18 +2769,18 @@ catch(err)
         
 }
 })
-app.put('/user_profile',async(req,res)=>
+app.put(apiModules.userProfileAdmin,async(req,res)=>
 {
     try
     {       
         console.log(req.body);
         var con=await Connection();
         var connect=con.connection;
-        var authorizationKey = req.headers['authorization'];
-        var token=authorizationKey.split(" ")[1];
-        var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
-        var userid=decoded.userid;
-        var roleId=decoded.roleid;
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+        // var userid=decoded.userid;
+        // var roleId=decoded.roleid;
         // console.log("the userid in access token "+userid);
         // let data=req.body;
         // let firstName=data.firstName;
@@ -1429,6 +2795,55 @@ app.put('/user_profile',async(req,res)=>
                 console.log(fields);
                 var firstName=fields.firstName
                 var lastName=fields.lastName;
+                let checkFname=validator.isAlpha(firstName);
+                let checkLname=validator.isAlpha(lastName);
+                let fnLength=validator.isMaxLength(firstName,50,min_length=2);
+                let lnLength=validator.isMaxLength(lastName,50,min_length=2);
+                // if(checkFname==false||checkLname==false||fnLength==false||lnLength==false)
+                //     {
+                //      let responseData=
+                //         {
+                //          "statusCode" :202,
+                //         "message":"Enter valid First Name and Last Name "
+                //         }                 
+                //         let jsonContent = JSON.stringify(responseData);
+                //         res.end(jsonContent);
+                //      return res;
+                //     }
+                if(checkFname==false||checkLname==false)
+                    {
+                     let responseData=
+                        {
+                         "statusCode" :202,
+                        // "message":"First Name and last Name accepts only alphabets "
+                        "message":messages.FNandLNalphabets
+                        }                 
+                        let jsonContent = JSON.stringify(responseData);
+                        res.end(jsonContent);
+                     return res;
+                    }
+                    if(firstName.length<2||firstName.length>=50||lastName.length<2||lastName.length>=50)
+                    {
+                        let responseData=
+                        {
+                         "statusCode" :202,
+                        // "message":"Enter first name and last name range in between 3 to 50 chnaracter only "
+                            "message":messages.FNandLNrange
+                    }                 
+                        let jsonContent = JSON.stringify(responseData);
+                        res.end(jsonContent);
+                     return res;
+                    }
+                    if(files.filetoupload.mimetype=='image/png'||files.filetoupload.mimetype=='image/jpg'||files.filetoupload.mimetype=='image/jpeg')
+                    {
+                        // let responseData=
+                        //     {
+                        //     "statusCode":201,
+                        //     "message":"Upload only jpg,jpeg,png format pictures only"
+                        //     };
+                        //     const jsonContent = JSON.stringify(responseData);
+                        //      res.status(201).end(jsonContent);
+                        //     return res;                    
                 var id=fields.id;
                 console.log("the &&&&&&&&&&&&&&&&"+firstName);
                 var oldpath =await files.filetoupload.filepath;       
@@ -1470,7 +2885,8 @@ app.put('/user_profile',async(req,res)=>
                              console.log(profilepicPath);
                              let now= new Date();
                             let currentDateAndTime = date.format(now,'DD-MM-YYYY HH:MM:SS');
-                            let query="update user_details set first_name=?,last_name=?,profile_pic=?,updated_on=? where id=?"; 
+                            // let query="update user_details set first_name=?,last_name=?,profile_pic=?,updated_on=? where id=?"; 
+                            let query=allQuerys.updtaeUserDetailswithProfilePic;
                             connect.query(query,[firstName,lastName,profilepicPath,currentDateAndTime,id],async(err,result)=>
                                 {
                                 console.log(query);
@@ -1504,6 +2920,17 @@ app.put('/user_profile',async(req,res)=>
                         });
                     }
                 })
+            }
+                else{
+                    let responseData=
+                            {
+                            "statusCode":201,
+                            "message":"Upload only jpg,jpeg,png format pictures only"
+                            };
+                            const jsonContent = JSON.stringify(responseData);
+                             res.status(201).end(jsonContent);
+                            return res;
+                }
             })
     }
     catch (err) 
@@ -1534,21 +2961,22 @@ app.put('/user_profile',async(req,res)=>
 
     }
 })
-app.delete('/user_profile',async(req,res)=>
+app.delete(apiModules.userProfileAdmin,async(req,res)=>
 {
     try{
-        var authorizationKey = req.headers['authorization'];
-        var token=authorizationKey.split(" ")[1];
-        console.log(token);
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // console.log(token);
         var con=await Connection();
         var connect=con.connection;
         let id=req.query.id;
-        var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+        // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
         // var userId=req.query.UserId;
-        var userId=decoded.userid;
-        var roleId=decoded.roleid;
-        console.log("the userid in access token "+userId);
-        let query="delete from user_details where id= ?";
+        // var userId=decoded.userid;
+        // var roleId=decoded.roleid;
+        console.log("the userid in access token "+userid);
+        // let query="delete from user_details where id= ?";
+        let query=allQuerys.deleteUserDetails;
         connect.query(query,[id],async(err,queryResults)=>
         {
             if(err)
@@ -1557,7 +2985,8 @@ app.delete('/user_profile',async(req,res)=>
             {
                 "statusCode" :500,
                 "error": err.stack,
-                "message":"Error while executing the query"
+                // "message":"Error while executing the query"
+                "message":messages.QueryError
             }
             let jsonContent = JSON.stringify(responseData);
             res.end(jsonContent);
@@ -1565,8 +2994,9 @@ app.delete('/user_profile',async(req,res)=>
             else{
                 responseData=
                 {
-                    "statusCode":404,
-                     "message":"User details deleted successfully",
+                    "statusCode":200,
+                    //  "message":"User details deleted successfully",
+                    "message":messages.deleteUserdetailsSuccess
                 };
                 const jsonContent = JSON.stringify(responseData);
                 res.end(jsonContent);
@@ -1600,23 +3030,24 @@ app.delete('/user_profile',async(req,res)=>
     }
 
 })
-app.get('/user_profile',async(req,res)=>
+app.get(apiModules.userProfileAdmin,async(req,res)=>
 {
     try{
-        var authorizationKey = req.headers['authorization'];
-        var token=authorizationKey.split(" ")[1];
-        console.log(token);
-        console.log(req.headers);
-        console.log("the ******************"+token);
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // console.log(token);
+        // console.log(req.headers);
+        // console.log("the ******************"+token);
         var con=await Connection();
         var connect=con.connection;
-        var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
-        console.log(decoded);
-        console.log(decoded.roleid+decoded.userid);
-        var roleId=decoded.roleid;
-        var userid=decoded.userid;
+        // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+        // console.log(decoded);
+        // console.log(decoded.roleid+decoded.userid);
+        // var roleId=decoded.roleid;
+        // var userid=decoded.userid;
         console.log("the userid in access token "+userid);
-        let queryForAll="select id,user_id,first_name,last_name,profile_pic from user_details where user_id=?";
+        // let queryForAll="select id,user_id,first_name,last_name,profile_pic from user_details where user_id=?";
+        let queryForAll=allQuerys.getUserDetails;
          connect.query(queryForAll,[userid],(err,result)=>
             {
                if(err)
@@ -1625,7 +3056,8 @@ app.get('/user_profile',async(req,res)=>
                 {
                     "statusCode" :500,
                     "error": err.stack,
-                    "message":"Error while executing the query"
+                    // "message":"Error while executing the query"
+                    "message":messages.QueryError
                 }
                 let jsonContent = JSON.stringify(responseData);
                 res.end(jsonContent)
@@ -1638,7 +3070,8 @@ app.get('/user_profile',async(req,res)=>
                         responseData=
                         {
                             "statusCode" :200,
-                            "message":"No user details found"                    
+                            // "message":"No user details found"
+                            "message":messages.noUsers                    
                         }
                     }
                     else
@@ -1646,7 +3079,8 @@ app.get('/user_profile',async(req,res)=>
                         responseData=
                          {
                              "statusCode" :200,
-                             "message":"Listing of user details succesfully",
+                            //  "message":"Listing of user details succesfully",
+                            "message":messages.ListOfUserSuccess,
                             "data":result
                          }
                     }
@@ -1685,33 +3119,605 @@ catch(err)
         
 }
 })
-app.delete('/deteUserdetails',async(req,res)=>
+app.post(apiModules.userProfileUser,async(req,res)=>
 {
-    try{
-        var authorizationKey = req.headers['authorization'];
-        var token=authorizationKey.split(" ")[1];
-        console.log(token);
+    try
+    {       
+        console.log(req.body);
         var con=await Connection();
         var connect=con.connection;
-        var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+        // var userid=decoded.userid;
+        // var roleId=decoded.roleid;
+        console.log("the userid in access token "+userid);
+        // let data=req.body;
+        // let firstName=data.firstName;
+        // let lastName=data.lastName;
+        // console.log(firstName);
+        let form = new formidable.IncomingForm();
+        var dir = './profilepic';
+         if (!fs.existsSync(dir)){
+            fs.mkdirSync(dir);
+            }  
+            form.parse(req, async function (err, fields, files) {
+                console.log(fields);
+                var firstName=fields.firstName
+                var lastName=fields.lastName;
+                let checkFname=validator.isAlpha(firstName);
+                let checkLname=validator.isAlpha(lastName);
+                let fnLength=validator.isMaxLength(firstName,50,min_length=2);
+                let lnLength=validator.isMaxLength(lastName,50,min_length=2);
+                if(checkFname==false||checkLname==false)
+                    {
+                     let responseData=
+                        {
+                         "statusCode" :202,
+                        "message":"First Name and last Name accepts only alphabets "
+                        }                 
+                        let jsonContent = JSON.stringify(responseData);
+                        res.end(jsonContent);
+                     return res;
+                    }
+                    if(firstName.length<2||firstName.length>=50||lastName.length<2||lastName.length>=50)
+                    {
+                        let responseData=
+                        {
+                         "statusCode" :202,
+                        "message":"Enter first name and last name range in between 3 to 50 chnaracter only "
+                        }                 
+                        let jsonContent = JSON.stringify(responseData);
+                        res.end(jsonContent);
+                     return res;
+                    }
+                    if(files.filetoupload.mimetype=='image/png'||files.filetoupload.mimetype=='image/jpg'||files.filetoupload.mimetype=='image/jpeg')
+                    {
+                        // let responseData=
+                        //     {
+                        //     "statusCode":201,
+                        //     "message":"Upload only jpg,jpeg,png format pictures only"
+                        //     };
+                        //     const jsonContent = JSON.stringify(responseData);
+                        //      res.status(201).end(jsonContent);
+                        //     return res;
+
+                    
+                console.log("the &&&&&&&&&&&&&&&&"+firstName);
+                var oldpath =await files.filetoupload.filepath;       
+                var newpath = dir;
+                fs.readFile(files.filetoupload.filepath,async function (err, data) 
+                {
+                    if (err)
+                    {
+                        responseData=
+                        {
+                        "statusCode" :500,
+                        "error": err.stack,
+                        "message":"Error while uploading the file"
+                        }
+                        let jsonContent = JSON.stringify(responseData);
+                        res.end(jsonContent);
+                        return res;
+                    }
+                    else{
+                        console.log('File read!');
+                        fs.writeFile( process.env.PATH_FOR_UPLOAD+"/"+firstName+lastName+".png",data,async function(err)
+                        {
+                            if(err)
+                            {
+                                responseData=
+                                {
+                                "statusCode" :500,
+                                "error": err.stack,
+                                "message":"Error while uploading the file"
+                                }
+                                let jsonContent = JSON.stringify(responseData);
+                                res.end(jsonContent);
+                                 return res;
+                            }
+                            else
+                            {
+                             let profilepicPath=PortId+"/images/"+firstName+lastName+".png";
+                            //  let profilepicPath=req.ip+port+"/images/"+userName+".png";
+                             console.log(profilepicPath);
+                             let now= new Date();
+                            let currentDateAndTime = date.format(now,'DD-MM-YYYY HH:MM:SS');
+                            // let queryforinsertorupdate="select * from user details where user_id=?";
+                            // let resultsforinsertorupdate=connect.query(queryforinsertorupdate,[userid]);
+                            let details=await userMailCheck.checkUserDetails(userid,con.db,con.connection);
+                            // console.log(resultsforinsertorupdate)
+                            if(details==0)
+                            {
+                            //  let query="insert into user_details(user_id,first_name,last_name,profile_pic,created_on,updated_on)values(?,?,?,?,?,?)"; 
+                            let query=allQuerys.insertUserDetailsWithProfilePic;
+                            connect.query(query,[userid,firstName,lastName,profilepicPath,currentDateAndTime,currentDateAndTime],async(err,result)=>
+                                 {
+                                console.log(query);
+                                 if(err)
+                                    {
+                                    responseData=
+                                        {
+                                             "statusCode" :500,
+                                             "error": err.stack,
+                                            "message":"error while executing the query"
+                                         }
+                                    let jsonContent = JSON.stringify(responseData);
+                                    res.end(jsonContent);
+                                     }
+                                    else
+                                    {
+            
+                                        let responseData=
+                                        {                           
+                                            "statusCode":200,
+                                            "message":"User details inserted successfully"
+                                        };
+                                        let jsonContent = JSON.stringify(responseData);
+                                        res.end(jsonContent);
+                                    }
+
+                                })
+                            }
+                            else{
+                                // let query="update user_details set first_name=?,last_name=?,profile_pic=?,updated_on=? where user_id=?"; 
+                                let query=allQuerys.updtaeUserDetailswithProfilePic;
+                                connect.query(query,[firstName,lastName,profilepicPath,currentDateAndTime,userid],async(err,result)=>
+                                    {
+                                    console.log(query);
+                                     if(err)
+                                        {
+                                        responseData=
+                                            {
+                                                 "statusCode" :500,
+                                                 "error": err.stack,
+                                                "message":"error while executing the query"
+                                             }
+                                        let jsonContent = JSON.stringify(responseData);
+                                        res.end(jsonContent);
+                                         }
+                                        else
+                                        {
+                
+                                            let responseData=
+                                            {                           
+                                                "statusCode":200,
+                                                "message":"User details updated successfully"
+                                            };
+                                            let jsonContent = JSON.stringify(responseData);
+                                            res.end(jsonContent);
+                                        }
+    
+                                    })
+                            }
+
+                            }
+        
+                        });
+                    }
+                })
+            }
+            else
+            {
+                let responseData=
+                {
+                "statusCode":201,
+                "message":"Upload only jpg,jpeg,png format pictures only"
+                };
+                const jsonContent = JSON.stringify(responseData);
+                 res.status(201).end(jsonContent);
+                return res;
+            }
+            })
+}
+catch(err)
+{
+    let message="";
+    if(err.name=="TokenExpiredError")
+    {
+       message="Token expired please login again";
+    }
+    else if(err.name=="JsonWebTokenError")
+    {
+        message=err.message;//please contact admin
+    }
+    else{
+        message=err.message;
+    }
+    console.log(err);
+    console.log(err.message);
+    console.log(err.name);
+    responseData=
+        {
+            "statusCode":401,
+             "message":message,
+        };
+        const jsonContent = JSON.stringify(responseData);
+        res.status(401).end(jsonContent);
+        
+}
+})
+app.put(apiModules.userProfileUser,async(req,res)=>
+{
+    try
+    {       
+        console.log(req.body);
+        var con=await Connection();
+        var connect=con.connection;
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+        // var userid=decoded.userid;
+        // var roleId=decoded.roleid;
+        // console.log("the userid in access token "+userid);
+        // let data=req.body;
+        // let firstName=data.firstName;
+        // let lastName=data.lastName;
+        // console.log(firstName);
+        let form = new formidable.IncomingForm();
+        var dir = './profilepic';
+         if (!fs.existsSync(dir)){
+            fs.mkdirSync(dir);
+            }  
+            form.parse(req, async function (err, fields, files) {
+                console.log(fields);
+                var firstName=fields.firstName
+                var lastName=fields.lastName;
+                let checkFname=validator.isAlpha(firstName);
+                let checkLname=validator.isAlpha(lastName);
+                let fnLength=validator.isMaxLength(firstName,50,min_length=2);
+                let lnLength=validator.isMaxLength(lastName,50,min_length=2);
+                // if(checkFname==false||checkLname==false||fnLength==false||lnLength==false)
+                //     {
+                //      let responseData=
+                //         {
+                //          "statusCode" :202,
+                //         "message":"Enter valid First Name and Last Name "
+                //         }                 
+                //         let jsonContent = JSON.stringify(responseData);
+                //         res.end(jsonContent);
+                //      return res;
+                //     }
+                if(checkFname==false||checkLname==false)
+                    {
+                     let responseData=
+                        {
+                         "statusCode" :202,
+                        // "message":"First Name and last Name accepts only alphabets "
+                        "message":messages.FNandLNalphabets
+                        }                 
+                        let jsonContent = JSON.stringify(responseData);
+                        res.end(jsonContent);
+                     return res;
+                    }
+                    if(firstName.length<2||firstName.length>=50||lastName.length<2||lastName.length>=50)
+                    {
+                        let responseData=
+                        {
+                         "statusCode" :202,
+                        // "message":"Enter first name and last name range in between 3 to 50 chnaracter only "
+                            "message":messages.FNandLNrange
+                    }                 
+                        let jsonContent = JSON.stringify(responseData);
+                        res.end(jsonContent);
+                     return res;
+                    }
+                    if(files.filetoupload.mimetype=='image/png'||files.filetoupload.mimetype=='image/jpg'||files.filetoupload.mimetype=='image/jpeg')
+                    {
+                        // let responseData=
+                        //     {
+                        //     "statusCode":201,
+                        //     "message":"Upload only jpg,jpeg,png format pictures only"
+                        //     };
+                        //     const jsonContent = JSON.stringify(responseData);
+                        //      res.status(201).end(jsonContent);
+                        //     return res;                    
+                var id=fields.id;
+                console.log("the &&&&&&&&&&&&&&&&"+firstName);
+                var oldpath =await files.filetoupload.filepath;       
+                var newpath = dir;
+                fs.readFile(files.filetoupload.filepath, function (err, data) 
+                {
+                    if (err)
+                    {
+                        responseData=
+                        {
+                        "statusCode" :500,
+                        "error": err.stack,
+                        "message":"Error while uploading the file"
+                        }
+                        let jsonContent = JSON.stringify(responseData);
+                        res.end(jsonContent);
+                        return res;
+                    }
+                    else{
+                        console.log('File read!');
+                        fs.writeFile(process.env.PATH_FOR_UPLOAD+"/"+firstName+lastName+".png",data, function(err)
+                        {
+                            if(err)
+                            {
+                                responseData=
+                                {
+                                "statusCode" :500,
+                                "error": err.stack,
+                                "message":"Error while uploading the file"
+                                }
+                                let jsonContent = JSON.stringify(responseData);
+                                res.end(jsonContent);
+                                 return res;
+                            }
+                            else
+                            {
+                             let profilepicPath=PortId+"/images/"+firstName+lastName+".png";
+                            //  let profilepicPath=req.ip+port+"/images/"+userName+".png";
+                             console.log(profilepicPath);
+                             let now= new Date();
+                            let currentDateAndTime = date.format(now,'DD-MM-YYYY HH:MM:SS');
+                            // let query="update user_details set first_name=?,last_name=?,profile_pic=?,updated_on=? where id=?"; 
+                            let query=allQuerys.updtaeUserDetailswithProfilePic;
+                            connect.query(query,[firstName,lastName,profilepicPath,currentDateAndTime,id],async(err,result)=>
+                                {
+                                console.log(query);
+                                 if(err)
+                                    {
+                                    responseData=
+                                        {
+                                             "statusCode" :500,
+                                             "error": err.stack,
+                                            "message":"error while executing the query"
+                                         }
+                                    let jsonContent = JSON.stringify(responseData);
+                                    res.end(jsonContent);
+                                     }
+                                    else
+                                    {
+            
+                                        let responseData=
+                                        {                           
+                                            "statusCode":200,
+                                            "message":"User details updated successfully"
+                                        };
+                                        let jsonContent = JSON.stringify(responseData);
+                                        res.end(jsonContent);
+                                    }
+
+                                })
+
+                            }
+        
+                        });
+                    }
+                })
+            }
+                else{
+                    let responseData=
+                            {
+                            "statusCode":201,
+                            "message":"Upload only jpg,jpeg,png format pictures only"
+                            };
+                            const jsonContent = JSON.stringify(responseData);
+                             res.status(201).end(jsonContent);
+                            return res;
+                }
+            })
+    }
+    catch (err) 
+    {
+        let message="";
+    if(err.name=="TokenExpiredError")
+    {
+       message="Token expired please login again";
+    }
+    else if(err.name=="JsonWebTokenError")
+    {
+        message=err.message;//please contact admin
+    }
+    else{
+        message=err.message;
+    }
+    console.log(err);
+    console.log(err.message);
+    console.log(err.name);
+    responseData=
+        {
+            "statusCode":401,
+             "message":message,
+        };
+        const jsonContent = JSON.stringify(responseData);
+        res.status(401).end(jsonContent);
+        
+
+    }
+})
+app.delete(apiModules.userProfileUser,async(req,res)=>
+{
+    try{
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // console.log(token);
+        var con=await Connection();
+        var connect=con.connection;
+        let id=req.query.id;
+        // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
         // var userId=req.query.UserId;
-        var userId=decoded.userid;
-        var roleId=decoded.roleid;
+        // var userId=decoded.userid;
+        // var roleId=decoded.roleid;
+        console.log("the userid in access token "+userid);
+        // let query="delete from user_details where id= ?";
+        let query=allQuerys.deleteUserDetails;
+        connect.query(query,[id],async(err,queryResults)=>
+        {
+            if(err)
+            {
+                responseData=
+            {
+                "statusCode" :500,
+                "error": err.stack,
+                // "message":"Error while executing the query"
+                "message":messages.QueryError
+            }
+            let jsonContent = JSON.stringify(responseData);
+            res.end(jsonContent);
+            }
+            else{
+                responseData=
+                {
+                    "statusCode":200,
+                    //  "message":"User details deleted successfully",
+                    "message":messages.deleteUserdetailsSuccess
+                };
+                const jsonContent = JSON.stringify(responseData);
+                res.end(jsonContent);
+            }
+        })
+    }
+    catch(err){
+        let message="";
+        if(err.name=="TokenExpiredError")
+        {
+           message="Token expired please login again";
+        }
+        else if(err.name=="JsonWebTokenError")
+        {
+            message=err.message;//please contact admin
+        }
+        else{
+            message=err.message;
+        }
+        console.log(err);
+        console.log(err.message);
+        console.log(err.name);
+        responseData=
+            {
+                "statusCode":401,
+                 "message":message,
+            };
+            const jsonContent = JSON.stringify(responseData);
+            res.status(401).end(jsonContent);
+            
+    }
+
+})
+app.get(apiModules.userProfileUser,async(req,res)=>
+{
+    try{
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // console.log(token);
+        // console.log(req.headers);
+        // console.log("the ******************"+token);
+        var con=await Connection();
+        var connect=con.connection;
+        // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+        // console.log(decoded);
+        // console.log(decoded.roleid+decoded.userid);
+        // var roleId=decoded.roleid;
+        // var userid=decoded.userid;
+        console.log("the userid in access token "+userid);
+        // let queryForAll="select id,user_id,first_name,last_name,profile_pic from user_details where user_id=?";
+        let queryForAll=allQuerys.getUserDetails;
+         connect.query(queryForAll,[userid],(err,result)=>
+            {
+               if(err)
+               {
+                responseData=
+                {
+                    "statusCode" :500,
+                    "error": err.stack,
+                    // "message":"Error while executing the query"
+                    "message":messages.QueryError
+                }
+                let jsonContent = JSON.stringify(responseData);
+                res.end(jsonContent)
+
+               }
+               else{
+                    let responseData="";
+                    if(result.length==0)
+                    {
+                        responseData=
+                        {
+                            "statusCode" :200,
+                            // "message":"No user details found"
+                            "message":messages.noUsers                    
+                        }
+                    }
+                    else
+                    {
+                        responseData=
+                         {
+                             "statusCode" :200,
+                            //  "message":"Listing of user details succesfully",
+                            "message":messages.ListOfUserSuccess,
+                            "data":result
+                         }
+                    }
+                    let jsonContent = JSON.stringify(responseData);
+                    res.end(jsonContent);
+               }
+
+            }
+        )
+        
+    }
+catch(err)
+{
+    let message="";
+    if(err.name=="TokenExpiredError")
+    {
+       message="Token expired please login again";
+    }
+    else if(err.name=="JsonWebTokenError")
+    {
+        message=err.message;//please contact admin
+    }
+    else{
+        message=err.message;
+    }
+    console.log(err);
+    console.log(err.message);
+    console.log(err.name);
+    responseData=
+        {
+            "statusCode":401,
+             "message":message,
+        };
+        const jsonContent = JSON.stringify(responseData);
+        res.status(401).end(jsonContent);
+        
+}
+})
+app.delete(apiModules.deleteUserDetailsAdmin,async(req,res)=>
+{
+    try{
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // console.log(token);
+        var con=await Connection();
+        var connect=con.connection;
+        // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+        // var userId=req.query.UserId;
+        // var userId=decoded.userid;
+        // var roleId=decoded.roleid;
         if(roleId==2)
         {
         let id=req.query.id;
         console.log("the userid in access token "+userId);
         // let query="delete users,user_details,projects from users inner join user_details inner join projects where users.id=user_details.user_id and user_details.user_id=projects.created_by and users.id=?";
-        let query="delete from users where id=?";
-        let query1="delete from user_details where user_id=?";
-        let query2="delete from projects where created_by=?";
+        // let query="delete from users where id=?";
+        let query=allQuerys.deleteUser;
+        // let query1="delete from user_details where user_id=?";
+        let query1=allQuerys.deleteUserDetails;
+        // let query2="delete from projects where created_by=?";
+        let query2=allQuerys.deleteProjectsBasedonCreatedby;
         connect.query(query,[id]);
         connect.query(query1,[id]);
         connect.query(query2,[id]);
         responseData=
                 {
                     "statusCode":200,
-                     "message":"All user details deleted successfully",
+                    //  "message":"All user details deleted successfully",
+                    "message":messages.deleteallUserdetailsSuccess
                 };
                 const jsonContent = JSON.stringify(responseData);
                 res.status(200).end(jsonContent);
@@ -1744,7 +3750,8 @@ app.delete('/deteUserdetails',async(req,res)=>
             responseData=
                 {
                     "statusCode":404,
-                     "message":"Check the role id",
+                    //  "message":"Check the role id",
+                    "message":messages.checkRoleId
                 };
                 const jsonContent = JSON.stringify(responseData);
                 res.end(jsonContent);
@@ -1778,11 +3785,109 @@ app.delete('/deteUserdetails',async(req,res)=>
             
     }    
 })
-app.post('/deletedProjectDetails',async(req,res)=>{  
+app.delete(apiModules.deleteUserDetailsUser,async(req,res)=>
+{
+    try{
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // console.log(token);
+        var con=await Connection();
+        var connect=con.connection;
+        // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+        // var userId=req.query.UserId;
+        // var userId=decoded.userid;
+        // var roleId=decoded.roleid;
+        if(roleId==2)
+        {
+        let id=req.query.id;
+        console.log("the userid in access token "+userId);
+        // let query="delete users,user_details,projects from users inner join user_details inner join projects where users.id=user_details.user_id and user_details.user_id=projects.created_by and users.id=?";
+        // let query="delete from users where id=?";
+        let query=allQuerys.deleteUser;
+        // let query1="delete from user_details where user_id=?";
+        let query1=allQuerys.deleteUserDetails;
+        // let query2="delete from projects where created_by=?";
+        let query2=allQuerys.deleteProjectsBasedonCreatedby;
+        connect.query(query,[id]);
+        connect.query(query1,[id]);
+        connect.query(query2,[id]);
+        responseData=
+                {
+                    "statusCode":200,
+                    //  "message":"All user details deleted successfully",
+                    "message":messages.deleteallUserdetailsSuccess
+                };
+                const jsonContent = JSON.stringify(responseData);
+                res.status(200).end(jsonContent);
+            
+        // connect.query(query,[id],async(err,queryResults)=>
+        // {
+        //     if(err)
+        //     {
+        //         responseData=
+        //     {
+        //         "statusCode" :500,
+        //         "error": err.stack,
+        //         "message":"Error while executing the query"
+        //     }
+        //     let jsonContent = JSON.stringify(responseData);
+        //     res.end(jsonContent);
+        //     }
+        //     else{
+        //         responseData=
+        //         {
+        //             "statusCode":200,
+        //              "message":"All user details deleted successfully",
+        //         };
+        //         const jsonContent = JSON.stringify(responseData);
+        //         res.status(200).end(jsonContent);
+        //     }
+        // })
+         }
+         else{
+            responseData=
+                {
+                    "statusCode":404,
+                    //  "message":"Check the role id",
+                    "message":messages.checkRoleId
+                };
+                const jsonContent = JSON.stringify(responseData);
+                res.end(jsonContent);
+         }
+    }
+    catch(err)
+    {
+        let message="";
+        if(err.name=="TokenExpiredError")
+        {
+           message="Token expired please login again";
+        }
+        else if(err.name=="JsonWebTokenError")
+        {
+            message=err.message;//please contact admin
+        }
+        else
+        {
+            message=err.message;
+        }
+        console.log(err);
+        console.log(err.message);
+        console.log(err.name);
+        responseData=
+            {
+                "statusCode":401,
+                 "message":message,
+            };
+            const jsonContent = JSON.stringify(responseData);
+            res.status(401).end(jsonContent);
+            
+    }    
+})
+app.post(apiModules.deletedProjectDetailsAdmin,async(req,res)=>{  
     try{ 
-        var authorizationKey = req.headers['authorization'];
-        var token=authorizationKey.split(" ")[1];
-        var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
         let data=req.body;
         console.log(data);
         let id=data.id;
@@ -1793,7 +3898,8 @@ app.post('/deletedProjectDetails',async(req,res)=>{
        let responseData=
         {
             "statusCode":200,
-             "message":"Deleted projects inserted into db",
+            //  "message":"Deleted projects inserted successfully",
+            "message":messages.deletedProjectInsert
         };
         const jsonContent = JSON.stringify(responseData);
         res.status(200).end(jsonContent);
@@ -1826,8 +3932,170 @@ app.post('/deletedProjectDetails',async(req,res)=>{
 
 
 })
-const port = 8877;
-app.listen(port, () => {
+app.post(apiModules.deletedProjectDetailsUser,async(req,res)=>{  
+    try{ 
+        // var authorizationKey = req.headers['authorization'];
+        // var token=authorizationKey.split(" ")[1];
+        // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+        let data=req.body;
+        console.log(data);
+        let id=data.id;
+        var con=await Connection();
+        var connect=con.connection;
+        let query ="insert into deleted_projects(id,project_name,project_version,created_by,created_on,updated_on)select id,project_name,project_version,created_by,created_on,updated_on from projects where created_by=?"
+        connect.query(query,[id]);
+       let responseData=
+        {
+            "statusCode":200,
+            //  "message":"Deleted projects inserted successfully",
+            "message":messages.deletedProjectInsert
+        };
+        const jsonContent = JSON.stringify(responseData);
+        res.status(200).end(jsonContent);
+    }    catch(err)
+    {
+        let message="";
+        if(err.name=="TokenExpiredError")
+        {
+           message="Token expired please login again";
+        }
+        else if(err.name=="JsonWebTokenError")
+        {
+            message=err.message;//please contact admin
+        }
+        else
+        {
+            message=err.message;
+        }
+        console.log(err);
+        console.log(err.message);
+        console.log(err.name);
+        responseData=
+            {
+                "statusCode":401,
+                 "message":message,
+            };
+            const jsonContent = JSON.stringify(responseData);
+            res.status(401).end(jsonContent);
+    }
+
+
+})
+app.get(apiModules.userCount,async(req,res)=>
+{
+try{
+    // var authorizationKey = req.headers['authorization'];
+    // var token=authorizationKey.split(" ")[1];
+    // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+    var con=await Connection();
+    let adminrole=1;
+    let userrole=2;
+    var connect=con.connection;
+    db=con.db;
+    connection=con.connection;
+    // let query="select count(*) as count from users where role_id=?";
+    let query=allQuerys.usersCount;
+    // let adminCountresult=connect.query(query,[adminrole]);
+    // let userCountresult=connect.query(query,[userrole]);
+    excel.excel(10,con.db,con.connection);
+    let query1="select * from users where id=?";
+    let query2="select * from user_details where user_id=?";
+    const result=await db.query(connection,query1,[10]);
+    var result2=await db.query(connection,query2,[10]);
+    let htmlContent=
+    "<style>table, th, td {  border:1px solid black; }  </style>"+
+    "<table>"+
+    "<tr>" +
+    "<th> role_id </th>"+
+    "<th>user name </th>"+
+    "<th>email_id</th>"+
+    "<th>created_date_and_time </th>"+
+    "<th>first_name</th>"+
+    "<th>last_name </th>"+
+    "<th>profile_pic </th>"+
+  "</tr>" +
+      "<tr>" +
+      "<td>" + result[0].role_id + "</td>"+
+      "<td>" + result[0].user_name + "</td>"+
+      "<td>" + result[0].email_id + "</td>"+
+      "<td>" + result[0].created_date_and_time + "</td>"+
+      "<td>" + result2[0].first_name + "</td>"+
+      "<td>" + result2[0].last_name + "</td>"+
+      "<td>" + result2[0].profile_pic + "</td>"+
+    "</tr>" +
+    "</table>";
+    console.log(htmlContent);
+    let attachments=[{filename: 'userdata.xlsx',
+    path: './userdata.xlsx'}];
+    email.send365Email(process.env.EMAIL_ID,"bhavana.dasari@ideabytes.com","User data",htmlContent,"User Data",attachments);
+    connect.query(query,[adminrole],async function(err,result)
+    {
+        let adminCount=await result[0].count;
+        // console.log(await result[0])
+        connect.query(query,[userrole],async function(err,userCountresult)
+        {
+            let userCount=userCountresult[0].count;
+            console.log(await result[0]);
+            let totalCount=adminCount+userCount;
+            let data={"users":userCount,"admins":adminCount,"total":totalCount};
+            let responseData=
+                {
+                    "statusCode":200,
+                    // "message":"Get the count users successfully",
+                    "message":messages.GetCountSuccess,
+                    "data":data
+                };
+                const jsonContent = JSON.stringify(responseData);
+                res.status(200).end(jsonContent);   
+
+        })
+
+    })
+    // let adminCount=adminCountresult[0];
+    // let userCount=userCountresult[0];
+    // console.log(adminCountresult[0]);
+    // let totalCount=userrole+userCount;
+    // console.log(adminCount);
+    // let data={"users":userCount,"admins":adminCount,"total":totalCount};
+    // let responseData=
+    //     {
+    //         "statusCode":200,
+    //          "message":"Get the count users successfully",
+    //          "data":data
+    //     };
+    //     const jsonContent = JSON.stringify(responseData);
+    //     res.status(200).end(jsonContent);   
+}
+catch(err)
+{
+    let message="";
+        if(err.name=="TokenExpiredError")
+        {
+           message="Token expired please login again";
+        }
+        else if(err.name=="JsonWebTokenError")
+        {
+            message=err.message;//please contact admin
+        }
+        else
+        {
+            message=err.message;
+        }
+        console.log(err);
+        console.log(err.message);
+        console.log(err.name);
+        responseData=
+            {
+                "statusCode":401,
+                 "message":message,
+            };
+            const jsonContent = JSON.stringify(responseData);
+            res.status(401).end(jsonContent);
+}
+})
+
+// const port = process.env.PORT;
+app.listen(process.env.PORT, () => {
     console.log("===================================");
-  console.log(`Server running on port${port}`);
+  console.log(`Server running on port${process.env.PORT}`);
 });
