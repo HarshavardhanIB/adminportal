@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 var formidable=require('formidable');
 var multer = require('multer');
+var nodemailer = require('nodemailer');
 var Static = require('node-static');
 var validator=require('mini-validator');
 var fs=require('fs');
@@ -15,17 +16,21 @@ app.use('/images', express.static(__dirname + '/profilepic'));
 var passwordHashFile=require('./passwordHashing');
 const {Connection} = require('./DBConnection');
 const { url } = require('inspector');
-const PortId="http://192.168.1.84:8877";
+const PortId=process.env.BASE_URL;
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const bodyParser = require('body-parser');
 const apiModules=require('./apiModules');
 const allQuerys=require('./allQuerys');
-const constants=require('./constants');
+const messages=require('./messages');
 const userMailCheck=require('./userNameAndMail');
+const constants=require('./constants');
+const email=require('./email');
 const date = require('date-and-time');
-const expiresIn="10m";
-const algorithm="HS512";
+const excel=require('./CreateExce');
+const { table } = require('console');
+// const expiresIn="10m";
+// const algorithm="HS512";
 app.use(bodyParser.urlencoded({ extended: true })); 
 var accessTokenSecret=process.env.SECRETTOKEN;
 var userid;
@@ -69,7 +74,7 @@ app.use(async function (req, res, next) {
              console.log("use try block enter");
             var authorizationKey = req.headers['authorization'];
             var token=authorizationKey.split(" ")[1];
-            var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
+            var decoded = jwt.verify(token,accessTokenSecret,{algorithm: constants.algorithm});
             userid=decoded.userid;
             roleId=decoded.roleid;
             reqPath=req.path;
@@ -107,7 +112,7 @@ app.use(async function (req, res, next) {
             if(err.name=="TokenExpiredError")
             {
             //    message="Token expired please login again";
-            message=constants.TokenExpiredError;
+            message=messages.TokenExpiredError;
             }
             else if(err.name=="JsonWebTokenError")
             {
@@ -189,7 +194,7 @@ app.post(apiModules.registration,async(req,res)=>
                 {
                     "statusCode" :202,
                     // "message":"Enter valid email id"
-                    "message":constants.validEmial                    
+                    "message":messages.validEmial                    
                 }                 
                 let jsonContent = JSON.stringify(responseData);
                 res.end(jsonContent);
@@ -206,7 +211,7 @@ app.post(apiModules.registration,async(req,res)=>
                 {
                     "statusCode" :202,
                     // "message":"User Name accepts only alphanumaric"
-                    "message":constants.UNalphaNumaric
+                    "message":messages.UNalphaNumaric
                 }                 
                 let jsonContent = JSON.stringify(responseData);
                 res.end(jsonContent);
@@ -218,7 +223,7 @@ app.post(apiModules.registration,async(req,res)=>
         {
             "statusCode" :202,
             // "message":"Enter user name range in between 3 to 20 chnaracter only"
-            "message":constants.UNRange
+            "message":messages.UNRange
         }                 
         let jsonContent = JSON.stringify(responseData);
         res.end(jsonContent);
@@ -233,7 +238,7 @@ app.post(apiModules.registration,async(req,res)=>
                 {
                     "statusCode" :202,
                     // "message":"User name already exists please user another username"
-                    "message":constants.UNexists
+                    "message":messages.UNexists
                 }                 
                 let jsonContent = JSON.stringify(responseData);
                 res.end(jsonContent);
@@ -247,7 +252,7 @@ app.post(apiModules.registration,async(req,res)=>
                 {
                     "statusCode" :202,
                     // "message":"Email id already exists please user another emailid"
-                    "message":constants.EIexists
+                    "message":messages.EIexists
                 } 
                 
                 let jsonContent = JSON.stringify(responseData);
@@ -293,7 +298,7 @@ app.post(apiModules.registration,async(req,res)=>
                 {
                     "statusCode" :202,
                     // "message":"In valid role id "
-                    "message":constants.invalidRole
+                    "message":messages.invalidRole
                 }                 
                 let jsonContent = JSON.stringify(responseData);
                 res.end(jsonContent);
@@ -354,7 +359,7 @@ app.post(apiModules.registration,async(req,res)=>
             "statusCode" :500,
             "error": err.stack,
             // "result":"error while inserting the data " 
-            "message":constants.errorOnInsertData
+            "message":messages.errorOnInsertData
             }
             let jsonContent = JSON.stringify(responseData);
             return res.end(jsonContent); 
@@ -362,10 +367,12 @@ app.post(apiModules.registration,async(req,res)=>
         }
     else
     {
+        htmlContent="";
+    email.send365Email(process.env.EMAIL_ID,emailId,constants.registrationSubject,constants.registrationText);
     let responseData={
         "statusCode":200,
         // "message":"User regisetred successfully"
-        "message":constants.UserRegisterSuccess
+        "message":messages.UserRegisterSuccess
         };
          
         let jsonContent = JSON.stringify(responseData);
@@ -401,7 +408,7 @@ app.get('/userNameAndMailIdsinDB',(req,res)=>
                     "statusCode":500,
                     "error":err.stack,
                     // "message":"Error while getting the data from the data base"
-                    "message":constants.errorwhilegetingData
+                    "message":messages.errorwhilegetingData
                 }
             }    
         else
@@ -461,7 +468,7 @@ app.post(apiModules.login,async(req,res)=>
             "statusCode" :500,
             "error": err.stack,
             // "message":"error while executing the query"
-            "message":constants.errorOnInsertData
+            "message":messages.errorOnInsertData
                 }
                 let jsonContent = JSON.stringify(responseData);
                 res.end(jsonContent);
@@ -512,7 +519,7 @@ app.post(apiModules.login,async(req,res)=>
                     responseData={
                         "statusCode":201,
                         //  "result":result,
-                        "message":constants.invalidUSandPsw
+                        "message":messages.invalidUSandPsw
                        };
                        let jsonContent = JSON.stringify(responseData);
                        res.end(jsonContent);
@@ -529,7 +536,7 @@ app.post(apiModules.login,async(req,res)=>
                         firstName=details.first_name;
                         lastName=details.last_name;
                         profilePic=details.profile_pic;
-                        var accessToken = jwt.sign({userid:userId,roleid:roleId}, accessTokenSecret,{expiresIn: expiresIn,algorithm: algorithm});
+                        var accessToken = jwt.sign({userid:userId,roleid:roleId}, accessTokenSecret,{expiresIn: constants.expiresIn,algorithm: constants.algorithm});
                         if(roleId==1)
                         {
                             let adminrole=1;
@@ -555,7 +562,7 @@ app.post(apiModules.login,async(req,res)=>
                                     {
                                     "statusCode":200,
                                     // "message":"Login successfully",
-                                    "message":constants.loginSuccess,
+                                    "message":messages.loginSuccess,
                                     // "accessToken":accessToken,
                                     "data":data
                                     };
@@ -575,7 +582,7 @@ app.post(apiModules.login,async(req,res)=>
                             {
                             "statusCode":200,
                             // "message":"Login successful",
-                            "message":constants.loginSuccess,
+                            "message":messages.loginSuccess,
                             // "accessToken":accessToken,
                             "data":data
                             };
@@ -669,7 +676,7 @@ app.post(apiModules.adminProject,async(req,res)=>
                 "statusCode" :500,
                 "error": err.stack,
                 // "message":"error while executing the query"
-                "message":constants.QueryError
+                "message":messages.QueryError
             }
             let jsonContent = JSON.stringify(responseData);
             res.end(jsonContent);
@@ -681,7 +688,7 @@ app.post(apiModules.adminProject,async(req,res)=>
                 {
                 "statusCode":200,
                 // "message":"Project inserted successfully"
-                "message":constants.insertProjects
+                "message":messages.insertProjects
                 };
                 let jsonContent = JSON.stringify(responseData);
                 res.end(jsonContent);
@@ -695,7 +702,7 @@ catch(err)
     if(err.name=="TokenExpiredError")
     {
     //    message="Token expired please login again";
-    message=constants.TokenExpiredError;
+    message=messages.TokenExpiredError;
     }
     else if(err.name=="JsonWebTokenError")
     {
@@ -763,7 +770,7 @@ app.put(apiModules.adminProject,async(req,res)=>
                 "statusCode" :500,
                 "error": err.stack,
                 // "message":"error while executing the query"
-                "message":constants.QueryError
+                "message":messages.QueryError
             }
             let jsonContent = JSON.stringify(responseData);
             res.end(jsonContent);
@@ -775,7 +782,7 @@ app.put(apiModules.adminProject,async(req,res)=>
             {
             "statusCode":200,
             // "message":"Project details updated successfully"
-            "message":constants.deleteProject
+            "message":messages.deleteProject
             };
             const jsonContent = JSON.stringify(responseData);
                         res.end(jsonContent);
@@ -850,7 +857,7 @@ app.delete(apiModules.adminProject,async(req,res)=>
                 "statusCode" :500,
                 "error": err.stack,
                 // "message":"Error while executing the query"
-                "message":constants.QueryError
+                "message":messages.QueryError
             }
             let jsonContent = JSON.stringify(responseData);
             res.end(jsonContent);
@@ -901,7 +908,7 @@ app.get(apiModules.adminProject,async(req,res)=>
         // var token=authorizationKey.split(" ")[1];
         // console.log(token);
         console.log(req.headers);
-        console.log("the ******************"+token);
+        // console.log("the ******************"+token);
         var con=await Connection();
         var connect=con.connection;
         // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
@@ -1068,7 +1075,7 @@ app.post(apiModules.userProject,async(req,res)=>
                 "statusCode" :500,
                 "error": err.stack,
                 // "message":"error while executing the query"
-                "message":constants.QueryError
+                "message":messages.QueryError
             }
             let jsonContent = JSON.stringify(responseData);
             res.end(jsonContent);
@@ -1080,7 +1087,7 @@ app.post(apiModules.userProject,async(req,res)=>
                 {
                 "statusCode":200,
                 // "message":"Project inserted successfully"
-                "message":constants.insertProjects
+                "message":messages.insertProjects
                 };
                 let jsonContent = JSON.stringify(responseData);
                 res.end(jsonContent);
@@ -1094,7 +1101,7 @@ catch(err)
     if(err.name=="TokenExpiredError")
     {
     //    message="Token expired please login again";
-    message=constants.TokenExpiredError;
+    message=messages.TokenExpiredError;
     }
     else if(err.name=="JsonWebTokenError")
     {
@@ -1162,7 +1169,7 @@ app.put(apiModules.userProject,async(req,res)=>
                 "statusCode" :500,
                 "error": err.stack,
                 // "message":"error while executing the query"
-                "message":constants.QueryError
+                "message":messages.QueryError
             }
             let jsonContent = JSON.stringify(responseData);
             res.end(jsonContent);
@@ -1174,7 +1181,7 @@ app.put(apiModules.userProject,async(req,res)=>
             {
             "statusCode":200,
             // "message":"Project details updated successfully"
-            "message":constants.deleteProject
+            "message":messages.deleteProject
             };
             const jsonContent = JSON.stringify(responseData);
                         res.end(jsonContent);
@@ -1249,7 +1256,7 @@ app.delete(apiModules.userProject,async(req,res)=>
                 "statusCode" :500,
                 "error": err.stack,
                 // "message":"Error while executing the query"
-                "message":constants.QueryError
+                "message":messages.QueryError
             }
             let jsonContent = JSON.stringify(responseData);
             res.end(jsonContent);
@@ -2462,7 +2469,7 @@ app.post(apiModules.uploadProfirePicUser,async(req,res)=>
                  {
                      if (err) throw err;
                      console.log('File read!');
-                     fs.writeFile( newpath+"/"+userName+".png",data, function(err)
+                     fs.writeFile( process.env.PATH_FOR_UPLOADpath+"/"+userName+".png",data, function(err)
                      {
                           if (err) throw err;
                           let profilepicPath=PortId+"/images/"+userName+".png";
@@ -2809,7 +2816,7 @@ app.put(apiModules.userProfileAdmin,async(req,res)=>
                         {
                          "statusCode" :202,
                         // "message":"First Name and last Name accepts only alphabets "
-                        "message":constants.FNandLNalphabets
+                        "message":messages.FNandLNalphabets
                         }                 
                         let jsonContent = JSON.stringify(responseData);
                         res.end(jsonContent);
@@ -2821,7 +2828,7 @@ app.put(apiModules.userProfileAdmin,async(req,res)=>
                         {
                          "statusCode" :202,
                         // "message":"Enter first name and last name range in between 3 to 50 chnaracter only "
-                            "message":constants.FNandLNrange
+                            "message":messages.FNandLNrange
                     }                 
                         let jsonContent = JSON.stringify(responseData);
                         res.end(jsonContent);
@@ -2979,7 +2986,7 @@ app.delete(apiModules.userProfileAdmin,async(req,res)=>
                 "statusCode" :500,
                 "error": err.stack,
                 // "message":"Error while executing the query"
-                "message":constants.QueryError
+                "message":messages.QueryError
             }
             let jsonContent = JSON.stringify(responseData);
             res.end(jsonContent);
@@ -2989,7 +2996,7 @@ app.delete(apiModules.userProfileAdmin,async(req,res)=>
                 {
                     "statusCode":200,
                     //  "message":"User details deleted successfully",
-                    "message":constants.deleteUserdetailsSuccess
+                    "message":messages.deleteUserdetailsSuccess
                 };
                 const jsonContent = JSON.stringify(responseData);
                 res.end(jsonContent);
@@ -3050,7 +3057,7 @@ app.get(apiModules.userProfileAdmin,async(req,res)=>
                     "statusCode" :500,
                     "error": err.stack,
                     // "message":"Error while executing the query"
-                    "message":constants.QueryError
+                    "message":messages.QueryError
                 }
                 let jsonContent = JSON.stringify(responseData);
                 res.end(jsonContent)
@@ -3064,7 +3071,7 @@ app.get(apiModules.userProfileAdmin,async(req,res)=>
                         {
                             "statusCode" :200,
                             // "message":"No user details found"
-                            "message":constants.noUsers                    
+                            "message":messages.noUsers                    
                         }
                     }
                     else
@@ -3073,7 +3080,7 @@ app.get(apiModules.userProfileAdmin,async(req,res)=>
                          {
                              "statusCode" :200,
                             //  "message":"Listing of user details succesfully",
-                            "message":constants.ListOfUserSuccess,
+                            "message":messages.ListOfUserSuccess,
                             "data":result
                          }
                     }
@@ -3195,7 +3202,7 @@ app.post(apiModules.userProfileUser,async(req,res)=>
                     }
                     else{
                         console.log('File read!');
-                        fs.writeFile( newpath+"/"+firstName+lastName+".png",data,async function(err)
+                        fs.writeFile( process.env.PATH_FOR_UPLOAD+"/"+firstName+lastName+".png",data,async function(err)
                         {
                             if(err)
                             {
@@ -3377,7 +3384,7 @@ app.put(apiModules.userProfileUser,async(req,res)=>
                         {
                          "statusCode" :202,
                         // "message":"First Name and last Name accepts only alphabets "
-                        "message":constants.FNandLNalphabets
+                        "message":messages.FNandLNalphabets
                         }                 
                         let jsonContent = JSON.stringify(responseData);
                         res.end(jsonContent);
@@ -3389,7 +3396,7 @@ app.put(apiModules.userProfileUser,async(req,res)=>
                         {
                          "statusCode" :202,
                         // "message":"Enter first name and last name range in between 3 to 50 chnaracter only "
-                            "message":constants.FNandLNrange
+                            "message":messages.FNandLNrange
                     }                 
                         let jsonContent = JSON.stringify(responseData);
                         res.end(jsonContent);
@@ -3425,7 +3432,7 @@ app.put(apiModules.userProfileUser,async(req,res)=>
                     }
                     else{
                         console.log('File read!');
-                        fs.writeFile(newpath+"/"+firstName+lastName+".png",data, function(err)
+                        fs.writeFile(process.env.PATH_FOR_UPLOAD+"/"+firstName+lastName+".png",data, function(err)
                         {
                             if(err)
                             {
@@ -3547,7 +3554,7 @@ app.delete(apiModules.userProfileUser,async(req,res)=>
                 "statusCode" :500,
                 "error": err.stack,
                 // "message":"Error while executing the query"
-                "message":constants.QueryError
+                "message":messages.QueryError
             }
             let jsonContent = JSON.stringify(responseData);
             res.end(jsonContent);
@@ -3557,7 +3564,7 @@ app.delete(apiModules.userProfileUser,async(req,res)=>
                 {
                     "statusCode":200,
                     //  "message":"User details deleted successfully",
-                    "message":constants.deleteUserdetailsSuccess
+                    "message":messages.deleteUserdetailsSuccess
                 };
                 const jsonContent = JSON.stringify(responseData);
                 res.end(jsonContent);
@@ -3618,7 +3625,7 @@ app.get(apiModules.userProfileUser,async(req,res)=>
                     "statusCode" :500,
                     "error": err.stack,
                     // "message":"Error while executing the query"
-                    "message":constants.QueryError
+                    "message":messages.QueryError
                 }
                 let jsonContent = JSON.stringify(responseData);
                 res.end(jsonContent)
@@ -3632,7 +3639,7 @@ app.get(apiModules.userProfileUser,async(req,res)=>
                         {
                             "statusCode" :200,
                             // "message":"No user details found"
-                            "message":constants.noUsers                    
+                            "message":messages.noUsers                    
                         }
                     }
                     else
@@ -3641,7 +3648,7 @@ app.get(apiModules.userProfileUser,async(req,res)=>
                          {
                              "statusCode" :200,
                             //  "message":"Listing of user details succesfully",
-                            "message":constants.ListOfUserSuccess,
+                            "message":messages.ListOfUserSuccess,
                             "data":result
                          }
                     }
@@ -3710,7 +3717,7 @@ app.delete(apiModules.deleteUserDetailsAdmin,async(req,res)=>
                 {
                     "statusCode":200,
                     //  "message":"All user details deleted successfully",
-                    "message":constants.deleteallUserdetailsSuccess
+                    "message":messages.deleteallUserdetailsSuccess
                 };
                 const jsonContent = JSON.stringify(responseData);
                 res.status(200).end(jsonContent);
@@ -3744,7 +3751,7 @@ app.delete(apiModules.deleteUserDetailsAdmin,async(req,res)=>
                 {
                     "statusCode":404,
                     //  "message":"Check the role id",
-                    "message":constants.checkRoleId
+                    "message":messages.checkRoleId
                 };
                 const jsonContent = JSON.stringify(responseData);
                 res.end(jsonContent);
@@ -3808,7 +3815,7 @@ app.delete(apiModules.deleteUserDetailsUser,async(req,res)=>
                 {
                     "statusCode":200,
                     //  "message":"All user details deleted successfully",
-                    "message":constants.deleteallUserdetailsSuccess
+                    "message":messages.deleteallUserdetailsSuccess
                 };
                 const jsonContent = JSON.stringify(responseData);
                 res.status(200).end(jsonContent);
@@ -3842,7 +3849,7 @@ app.delete(apiModules.deleteUserDetailsUser,async(req,res)=>
                 {
                     "statusCode":404,
                     //  "message":"Check the role id",
-                    "message":constants.checkRoleId
+                    "message":messages.checkRoleId
                 };
                 const jsonContent = JSON.stringify(responseData);
                 res.end(jsonContent);
@@ -3892,7 +3899,7 @@ app.post(apiModules.deletedProjectDetailsAdmin,async(req,res)=>{
         {
             "statusCode":200,
             //  "message":"Deleted projects inserted successfully",
-            "message":constants.deletedProjectInsert
+            "message":messages.deletedProjectInsert
         };
         const jsonContent = JSON.stringify(responseData);
         res.status(200).end(jsonContent);
@@ -3941,7 +3948,7 @@ app.post(apiModules.deletedProjectDetailsUser,async(req,res)=>{
         {
             "statusCode":200,
             //  "message":"Deleted projects inserted successfully",
-            "message":constants.deletedProjectInsert
+            "message":messages.deletedProjectInsert
         };
         const jsonContent = JSON.stringify(responseData);
         res.status(200).end(jsonContent);
@@ -3984,14 +3991,47 @@ try{
     let adminrole=1;
     let userrole=2;
     var connect=con.connection;
+    db=con.db;
+    connection=con.connection;
     // let query="select count(*) as count from users where role_id=?";
     let query=allQuerys.usersCount;
     // let adminCountresult=connect.query(query,[adminrole]);
     // let userCountresult=connect.query(query,[userrole]);
+    excel.excel(10,con.db,con.connection);
+    let query1="select * from users where id=?";
+    let query2="select * from user_details where user_id=?";
+    const result=await db.query(connection,query1,[10]);
+    var result2=await db.query(connection,query2,[10]);
+    let htmlContent=
+    "<style>table, th, td {  border:1px solid black; }  </style>"+
+    "<table>"+
+    "<tr>" +
+    "<th> role_id </th>"+
+    "<th>user name </th>"+
+    "<th>email_id</th>"+
+    "<th>created_date_and_time </th>"+
+    "<th>first_name</th>"+
+    "<th>last_name </th>"+
+    "<th>profile_pic </th>"+
+  "</tr>" +
+      "<tr>" +
+      "<td>" + result[0].role_id + "</td>"+
+      "<td>" + result[0].user_name + "</td>"+
+      "<td>" + result[0].email_id + "</td>"+
+      "<td>" + result[0].created_date_and_time + "</td>"+
+      "<td>" + result2[0].first_name + "</td>"+
+      "<td>" + result2[0].last_name + "</td>"+
+      "<td>" + result2[0].profile_pic + "</td>"+
+    "</tr>" +
+    "</table>";
+    console.log(htmlContent);
+    let attachments=[{filename: 'userdata.xlsx',
+    path: './userdata.xlsx'}];
+    email.send365Email(process.env.EMAIL_ID,"bhavana.dasari@ideabytes.com","User data",htmlContent,"User Data",attachments);
     connect.query(query,[adminrole],async function(err,result)
     {
         let adminCount=await result[0].count;
-        console.log(await result[0])
+        // console.log(await result[0])
         connect.query(query,[userrole],async function(err,userCountresult)
         {
             let userCount=userCountresult[0].count;
@@ -4002,7 +4042,7 @@ try{
                 {
                     "statusCode":200,
                     // "message":"Get the count users successfully",
-                    "message":constants.GetCountSuccess,
+                    "message":messages.GetCountSuccess,
                     "data":data
                 };
                 const jsonContent = JSON.stringify(responseData);
@@ -4053,6 +4093,7 @@ catch(err)
             res.status(401).end(jsonContent);
 }
 })
+
 // const port = process.env.PORT;
 app.listen(process.env.PORT, () => {
     console.log("===================================");
