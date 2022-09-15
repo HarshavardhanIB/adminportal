@@ -1,5 +1,5 @@
 module.exports={
-    insertUsers:"insert into users(role_id,user_name,email_id,password,active,created_date_and_time,update_date_and_time)values(?,?,?,?,?,?,?)",
+    insertUsers:"insert into users(role_id,user_name,email_id,password,active,created_date_and_time,update_date_and_time,`key"+"`)values(?,?,?,?,?,?,?,?)",
     getLoginDetails:"select password,user_name,id,role_id from users where `user_name`=?||`email_id`=?",
     insertProject:"insert into projects(project_name,project_version,created_by,created_on,updated_on)values(?,?,?,?,?)",
     updtaeProject:"update projects set project_name=?,project_version=?,updated_on=? where id=?",

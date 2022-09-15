@@ -8,14 +8,15 @@ let query2="select * from user_details where user_id=?";
 // var connect=con.connection;
 const result=await db.query(connection,query,[id]);
 var result2=await db.query(connection,query2,[id]);
-
-if (!fs.existsSync('./userdata.xlsx'))
+let excel_file="./"+id+".xlsx";
+if (!fs.existsSync(excel_file))
 {
-    var writeStream = fs.createWriteStream("userdata.xlsx");
+    var writeStream = fs.createWriteStream(excel_file);
     // var header="role_Id"+"\t"+" User_Name"+"\t"+"email_id"+"Created_On"+"\t"+" First_Name"+"\t"+"Last_Name"+"Profile_pic"+"\n";
     // writeStream.write(header);     
 } 
-const file = reader.readFile('./userdata.xlsx');
+const file = reader.readFile(excel_file);
+
 let userData = [{
     role_Id:result[0].role_id,
     User_Name:result[0].user_name,
@@ -27,7 +28,7 @@ let userData = [{
 }];
 const ws = reader.utils.json_to_sheet(userData);
 reader.utils.book_append_sheet(file,ws);
-reader.writeFile(file,'./userdata.xlsx');
+reader.writeFile(file,excel_file);
 }
 module.exports={
     excel

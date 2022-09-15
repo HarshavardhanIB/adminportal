@@ -31,5 +31,9 @@ module.exports=
     insertProjects:"Project inserted successfully",
     deleteProject:"Project details updated successfully",
     deleteallUserdetailsSuccess:"All user details deleted successfully",
+    invalidRolePath:"Invalid roleId and path",
+    tokenUnauthorized:"Token unauthorized",
+    emailSend:"Email send successfully",
+    checkMail:"Your account is not activated please check maill and activate yout account"
 
 }
