@@ -34,6 +34,7 @@ module.exports=
     invalidRolePath:"Invalid roleId and path",
     tokenUnauthorized:"Token unauthorized",
     emailSend:"Email send successfully",
-    checkMail:"Your account is not activated please check maill and activate yout account"
+    checkMail:"Your account is not activated please check maill and activate yout account",
+    invalidKey:"Invalid user activation key"
 
 }

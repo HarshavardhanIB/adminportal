@@ -15,5 +15,7 @@ module.exports={
  deletedProjectDetailsUser:"/api/User/deletedProjectDetails",
  userCount: "/api/admin/usersCount",
  checkJwt: "/checkorvalidateJwt",
- sendUserinfo:"/api/admin/sendUserinfo"
+ sendUserinfo:"/api/admin/sendUserinfo",
+ userActivatiom:"/api/user/activation",
+ 
 }

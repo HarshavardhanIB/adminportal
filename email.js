@@ -21,7 +21,8 @@ async function send365Email(from,to,subject,html,text,attachments) {
             attachments
         });
     } catch (err) { 
-        console.error(`send365Email: An error occurred:`, err);
+        // console.error(`send365Email: An error occurred:`, err);
+        console.log("error");
     }
 }
 module.exports ={

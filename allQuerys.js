@@ -15,4 +15,7 @@ module.exports={
     deleteProjectsBasedonCreatedby:"delete from projects where created_by=?",
     deleteUser:"delete from users where id=?",
     usersCount:"select count(*) as count from users where role_id=?",
+    getIdUsingKey:"select id from users where key=?",
+    userActivation:"update users set active=1 where id=?",
+    MontlyUserdata:"SELECT users.role_id,users.id,users.user_name,user_details.first_name,user_details.last_name,user_details.created_on from users left join user_details on users.id=user_details.user_id where users.created_date_and_time<=? AND users.created_date_and_time>=?"
 }

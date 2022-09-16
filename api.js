@@ -18,6 +18,7 @@ const { Connection } = require('./DBConnection');
 const { url } = require('inspector');
 const PortId = process.env.BASE_URL;
 const jwt = require('jsonwebtoken');
+const excelJS = require('exceljs');
 const bcrypt = require('bcrypt');
 const bodyParser = require('body-parser');
 const apiModules = require('./apiModules');
@@ -60,7 +61,7 @@ app.use(async function (req, res, next) {
         res.set('Content-Type', 'text/html');
         res.send(Buffer.from('<h2>Please contact admin </h2>'));
     }
-    else if (req.path == '/api/auth/login' || req.path == '/api/auth/registration') {
+    else if (req.path == '/api/auth/login' || req.path == '/api/auth/registration' || req.path == '/user/activation' || req.path=='/api/admin/sendUserinfo') {
         console.log("if block enter");
         con = await Connection();
         connect = con.connection;
@@ -88,8 +89,8 @@ app.use(async function (req, res, next) {
             roleId = decoded.roleid;
             reqPath = req.path;
             adminOrUser = reqPath.split("/")[2];
-            console.log("**********************");
-            console.log(adminOrUser);
+            // console.log("**********************");
+            // console.log(adminOrUser);
             if (adminOrUser == "admin" && roleId == 1) {
                 con = await Connection();
                 connect = con.connection;
@@ -125,9 +126,9 @@ app.use(async function (req, res, next) {
             else {
                 message = err.message;
             }
-            console.log(err);
+            // console.log(err);
             console.log(err.message);
-            console.log(err.name);
+            // console.log(err.name);
             responseData =
             {
                 "statusCode": 401,
@@ -356,13 +357,21 @@ app.post(apiModules.registration, async (req, res) => {
                 // return res; 
             }
             else {
-                htmlContent = `<div>
-                <h1>Email Confirmation</h1>
-                <h2>Hello ${userName}</h2>
-                <p>Thank you for register in ADMIN PORTAL. Please confirm your email by clicking on the following link</p>
-                <a href=http://localhost:8977/api/${key}> Click here</a>
-                </div>`;
-                email.send365Email(process.env.EMAIL_ID, emailId, constants.registrationSubject,htmlContent, constants.registrationText);
+                htmlContent = `<form action="` + process.env.BASE_URL + "/user/activation?key=" + key + `"` +
+                    `enctype="multipart/form-data" 
+                method="GET">
+                <h3>Hello ${userName}</h3>
+                <p>Thank you for register in ADMIN PORTAL. Please click on the click here button to activate your account</p>
+                <input type="submit" value="click here"></input>                
+                </form>`;
+                // console.log(htmlContent);
+                //  `<div>
+                // <h1>Email Confirmation</h1>
+                // <h2>Hello ${userName}</h2>
+                // <p>Thank you for register in ADMIN PORTAL. Please confirm your email by clicking on the following link</p>
+                // <a href=http://localhost:8977/api/${key}> Click here</a>
+                // </div>`;
+                email.send365Email(process.env.EMAIL_ID, emailId, constants.registrationSubject, htmlContent, constants.registrationText);
                 let responseData = {
                     "statusCode": 200,
                     // "message":"User regisetred successfully"
@@ -523,7 +532,7 @@ app.post(apiModules.login, async (req, res) => {
                     let lastName = "";
                     let profilePic = "";
                     console.log("valid");
-                    result = "login successfully";
+                    // result = "login successfully";
                     let details = await userMailCheck.getNameAndprofile(userId, con.db, con.connection);
                     // let details=connect.query(queryforUserdetails,[userId]);
                     console.log("the details" + details);
@@ -3769,9 +3778,14 @@ app.get(apiModules.userCount, async (req, res) => {
 })
 app.post(apiModules.sendUserinfo, async (req, res) => {
     try {
-        cron.schedule('0 0 0 1 0', async function () {
-            let emailId = req.data.emailId;
-            excel.excel(userid, con.db, con.connection);
+        console.log("entered");
+        cron.schedule('*/10 * * * * *', async function () {
+            console.log("entered1");
+            // let emailId = req.data.emailId;
+            let emailId="harshavardhan.kadupu@ideabytes.com";
+            let userid=10;
+            // excel.excel(userid, con.db, con.connection);
+            excel.excelUsingEJ(userid, con.db, con.connection);
             let query1 = "select * from users where id=?";
             let query2 = "select * from user_details where user_id=?";
             const result = await con.db.query(con.connection, query1, [userid]);
@@ -3813,7 +3827,49 @@ app.post(apiModules.sendUserinfo, async (req, res) => {
             res.status(401).end(jsonContent);
             return res;
         })
-    } catch (error) {
+    } catch (err) {
+        let responseData =
+        {
+            "statusCode": 401,
+            "message": err.stack,
+        };
+        console.log(err.stack);
+        const jsonContent = JSON.stringify(responseData);
+        res.status(401).end(jsonContent);
+        return res;
+    }
+
+})
+app.get(apiModules.userActivatiom, async (req, res) => {
+    try {
+        console.log(req);
+        console.log(req.query);
+        let key = req.query.key;
+        let query = allQuerys.getIdUsingKey;
+        const resultforId = await con.db.query(con.connection, query, [key]);
+        if (resultforId.length == 0) {
+            let responseData =
+            {
+                "statusCode": 202,
+                "message": messages.invalidKey,
+            };
+            const jsonContent = JSON.stringify(responseData);
+            res.status(202).end(jsonContent);
+            return res;
+        }
+        let id = resultforId[0].id;
+        let query2 = allQuerys.userActivation;
+        const result = await con.db.query(con.connection, query2, [id]);
+        let responseData =
+        {
+            "statusCode": 200,
+            "message": messages.userActivation
+        };
+        const jsonContent = JSON.stringify(responseData);
+        res.status(200).end(jsonContent);
+        return res;
+    }
+    catch (err) {
         let responseData =
         {
             "statusCode": 401,
@@ -3823,11 +3879,6 @@ app.post(apiModules.sendUserinfo, async (req, res) => {
         res.status(401).end(jsonContent);
         return res;
     }
-
-})
-app.get(apiModules.sendUserinfo, async (req, res) => {
-    let query = "update users set active=1";
-    const result = await con.db.query(con.connection, query);
 })
 //
 
