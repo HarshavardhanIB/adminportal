@@ -35,6 +35,8 @@ module.exports=
     tokenUnauthorized:"Token unauthorized",
     emailSend:"Email send successfully",
     checkMail:"Your account is not activated please check maill and activate yout account",
-    invalidKey:"Invalid user activation key"
+    invalidKey:"Invalid user activation key",
+    userActivation:"User activated successfully proceed to login",
+    validEmial:"enter valid inputs"
 
 }

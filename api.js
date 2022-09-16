@@ -176,6 +176,31 @@ app.post(apiModules.registration, async (req, res) => {
         let emailId = data.emailid;
         let password = data.password;
         let roleid = data.roleId;
+        console.log(req.body.length+"**********************************************8");
+        if(req.body.length<4)
+        {
+            let responseData =
+            {
+                "statusCode": 202,
+                // "message":"Enter valid email id"
+                "message": messages.validinput
+            }
+            let jsonContent = JSON.stringify(responseData);
+            res.end(jsonContent);
+            return res;
+        }
+        if(userName==" "||emailId==" "||password==" ")
+        {
+            let responseData =
+            {
+                "statusCode": 202,
+                // "message":"Enter valid email id"
+                "message": messages.validinput
+            }
+            let jsonContent = JSON.stringify(responseData);
+            res.end(jsonContent);
+            return res;
+        }
         // var connection=dbConnection.connection;
         var con = await Connection();
         console.log(con);
@@ -396,40 +421,40 @@ app.post(apiModules.registration, async (req, res) => {
     }
 
 })
-app.get('/userNameAndMailIdsinDB', (req, res) => {
-    try {
-        var connection = dbConnection.connection;
-        let query = "select user_name,email_id from user_details";
-        connection.query(query, function (err, result) {
-            let responseData = "";
-            if (err) {
-                responseData = {
-                    "statusCode": 500,
-                    "error": err.stack,
-                    // "message":"Error while getting the data from the data base"
-                    "message": messages.errorwhilegetingData
-                }
-            }
-            else {
-                responseData = {
-                    "statusCode": 200,
-                    "result": result
-                }
-            }
-            const jsonContent = JSON.stringify(responseData);
-            res.end(jsonContent);
-        });
-    }
-    catch (err) {
-        console.log(err.stack);
-        responseData = {
-            "statusCode": 404,
-            "result": err.stack,
-        };
-        const jsonContent = JSON.stringify(responseData);
-        res.end(jsonContent);
-    }
-})
+// app.get('/userNameAndMailIdsinDB', (req, res) => {
+//     try {
+//         var connection = dbConnection.connection;
+//         let query = "select user_name,email_id from user_details";
+//         connection.query(query, function (err, result) {
+//             let responseData = "";
+//             if (err) {
+//                 responseData = {
+//                     "statusCode": 500,
+//                     "error": err.stack,
+//                     // "message":"Error while getting the data from the data base"
+//                     "message": messages.errorwhilegetingData
+//                 }
+//             }
+//             else {
+//                 responseData = {
+//                     "statusCode": 200,
+//                     "result": result
+//                 }
+//             }
+//             const jsonContent = JSON.stringify(responseData);
+//             res.end(jsonContent);
+//         });
+//     }
+//     catch (err) {
+//         console.log(err.stack);
+//         responseData = {
+//             "statusCode": 404,
+//             "result": err.stack,
+//         };
+//         const jsonContent = JSON.stringify(responseData);
+//         res.end(jsonContent);
+//     }
+// })
 app.post(apiModules.login, async (req, res) => {
     try {
         let data = req.body;

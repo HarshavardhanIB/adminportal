@@ -43,6 +43,7 @@ async function excelUsingEJ(id, db, connection) {
     let currentDateAndTime = date.format(now, 'DD-MM-YYYY HH:MM:SS');
     let query = allQuerys.MontlyUserdata;
     let result = await db.query(connection, query, [currentDateAndTime, previousMonth]);
+    console.log(result);
     // const workbook = new ExcelJS.Workbook();
     // const sheet = workbook.addWorksheet('sheet');
     var workbook = XLSX.utils.book_new();
