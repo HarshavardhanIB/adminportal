@@ -1,6 +1,5 @@
 module.exports=
-{
-    accessTokenSecret:'ideabytes',
+{   accessTokenSecret:'ideabytes',
     validEmial:"Enter valid email id",
     UNalphaNumaric:"User Name accepts only alphanumaric",
     UNRange:"Enter user name range in between 3 to 20 chnaracter only",
@@ -37,6 +36,6 @@ module.exports=
     checkMail:"Your account is not activated please check maill and activate yout account",
     invalidKey:"Invalid user activation key",
     userActivation:"User activated successfully proceed to login",
-    validEmial:"enter valid inputs"
+    validinput:"Enter valid inputs"
 
 }

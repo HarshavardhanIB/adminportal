@@ -61,7 +61,7 @@ app.use(async function (req, res, next) {
         res.set('Content-Type', 'text/html');
         res.send(Buffer.from('<h2>Please contact admin </h2>'));
     }
-    else if (req.path == '/api/auth/login' || req.path == '/api/auth/registration' || req.path == '/user/activation' || req.path=='/api/admin/sendUserinfo') {
+    else if (req.path == '/api/auth/login' || req.path == '/api/auth/registration' || req.path == '/user/activation' || req.path == '/api/admin/sendUserinfo') {
         console.log("if block enter");
         con = await Connection();
         connect = con.connection;
@@ -176,31 +176,34 @@ app.post(apiModules.registration, async (req, res) => {
         let emailId = data.emailid;
         let password = data.password;
         let roleid = data.roleId;
-        console.log(req.body.length+"**********************************************8");
-        if(req.body.length<4)
+        // console.log(req.body.length+"**********************************************8");
+        // if (data.length < 4) 
+        console.log(Object.keys(req.body).length);
+        if(Object.keys(req.body).length<4)
         {
             let responseData =
             {
                 "statusCode": 202,
-                // "message":"Enter valid email id"
-                "message": messages.validinput
+                // "message": messages.validinput
+                "message":"Insufficient input"
+            }
+            console.log(responseData);
+            let jsonContent = JSON.stringify(responseData);
+            res.end(jsonContent);
+            return res;
+        }
+        if (Object.keys(req.body.userName).length == 0 || Object.keys(req.body.emailid).length == 0 || Object.keys(req.body.password).length== 0 ||Object.keys(req.body.roleId).length== 0) {
+            let responseData =
+            {
+                "statusCode": 202,
+                "message":"Enter valid input"
+                // "message":messages.validinput
             }
             let jsonContent = JSON.stringify(responseData);
             res.end(jsonContent);
             return res;
         }
-        if(userName==" "||emailId==" "||password==" ")
-        {
-            let responseData =
-            {
-                "statusCode": 202,
-                // "message":"Enter valid email id"
-                "message": messages.validinput
-            }
-            let jsonContent = JSON.stringify(responseData);
-            res.end(jsonContent);
-            return res;
-        }
+               
         // var connection=dbConnection.connection;
         var con = await Connection();
         console.log(con);
@@ -3807,8 +3810,8 @@ app.post(apiModules.sendUserinfo, async (req, res) => {
         cron.schedule('*/10 * * * * *', async function () {
             console.log("entered1");
             // let emailId = req.data.emailId;
-            let emailId="harshavardhan.kadupu@ideabytes.com";
-            let userid=10;
+            let emailId = "harshavardhan.kadupu@ideabytes.com";
+            let userid = 10;
             // excel.excel(userid, con.db, con.connection);
             excel.excelUsingEJ(userid, con.db, con.connection);
             let query1 = "select * from users where id=?";
