@@ -2,7 +2,7 @@ const mysql = require('mysql');
 require('dotenv').config();
 const { makeDb } = require('mysql-async-simple');
 config = {
-    host:process.env.DB_HOST,
+    host:process.env.DBDB_HOST,
     port:process.env.DB_PORT,
     user:process.env.DB_USER,
     password:process.env.DB_PASSWORD,

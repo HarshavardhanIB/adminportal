@@ -36,21 +36,76 @@ async function excelUsingEJ(id, db, connection) {
     console.log("excelUsingEJ entered");
     let now = new Date();
     let today = now.getDate();
-    let previosmonth = now.getMonth() - 1;
+    let previosmonth = now.getMonth();
+    if(previosmonth<10)
+    {
+        previosmonth='0'+previosmonth;
+    }
     let year = now.getFullYear();
-    let time = date.format(now, 'HH:MM:SS')
-    let previousMonth = today + "-" + previosmonth + "-" + year + " " + time;
-    let currentDateAndTime = date.format(now, 'DD-MM-YYYY HH:MM:SS');
+    let time = date.format(now, 'HH:mm:ss')
+    let previousMonth = year + "-" + previosmonth + "-" + today + " " + time;
+    let currentDateAndTime = date.format(now, 'YYYY-MM-DD HH:mm:ss');
     let query = allQuerys.MontlyUserdata;
     let result = await db.query(connection, query, [currentDateAndTime, previousMonth]);
+    if(result.length==0)
+    {
+       return false;
+    }
     console.log(result);
     // const workbook = new ExcelJS.Workbook();
     // const sheet = workbook.addWorksheet('sheet');
     var workbook = XLSX.utils.book_new();
     var ws = workbook.Sheets["Sheet1"];
     var worksheet = XLSX.utils.aoa_to_sheet(ws,result);
-    XLSX.writeFile(workbook, "./userdata.xlsb");
+    // var worksheet=XLSX.utils.json_to_sheet(result,ws);
+    XLSX.writeFile(workbook,"userdata.xlsx");
+}
+async function usingExceljs(id, db, connection)
+{
+   
+   try{ console.log("excelUsingEJ entered");
+    let now = new Date();
+    let today = now.getDate();
+    let previosmonth = now.getMonth();
+    if(previosmonth<10)
+    {
+        previosmonth='0'+previosmonth;
+    }
+    let year = now.getFullYear();
+    let time = date.format(now, 'HH:mm:ss')
+    let previousMonth = year + "-" + previosmonth + "-" + today + " " + time;
+    let currentDateAndTime = date.format(now, 'YYYY-MM-DD HH:mm:ss');
+    let query = allQuerys.MontlyUserdata;
+    let result = await db.query(connection, query, [currentDateAndTime, previousMonth]);
+    if(result.length==0)
+    {
+        return false;
+    }
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('My Sheet');
+    sheet.addRows(result);
+    workbook.xlsx.writeFile("userdata.xlsx")
+        .then(function () {
+            console.log("excel file created successfully");
+        });
+    }
+    catch(err)
+    {
+        console.log(err.stack);
+        
+    }
+}
+async function generateExcel(data)
+{
+    var worksheet = XLSX.utils.json_to_sheet(data);
+    // var ws = workbook.Sheets["Sheet1"];
+    var workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Data");    
+    // aoa_to_sheet(ws,data);
+    XLSX.writeFile(workbook,"userdata.xlsx");
+    console.log("entered and excel cretated");
+
 }
 module.exports = {
-    excel,excelUsingEJ
+    excel,excelUsingEJ,usingExceljs,generateExcel
 }

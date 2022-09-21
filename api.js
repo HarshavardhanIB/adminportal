@@ -6,6 +6,7 @@ var nodemailer = require('nodemailer');
 var Static = require('node-static');
 var validator = require('mini-validator');
 var fs = require('fs');
+const XLSX = require('xlsx');
 const path = require('path');
 var nstatic = require('node-static');
 var emailValidator = require('email-validator');
@@ -13,13 +14,16 @@ const app = express();
 app.use(express.json());
 // const accessTokenSecret = 'ideabytes';
 app.use('/images', express.static(__dirname + '/profilepic'));
+app.use('/user/activation', express.static(__dirname + '/user_activation'));
 var passwordHashFile = require('./passwordHashing');
 const { Connection } = require('./DBConnection');
 const { url } = require('inspector');
 const PortId = process.env.BASE_URL;
 const jwt = require('jsonwebtoken');
+const checknpm = require("check-node-version");
 const excelJS = require('exceljs');
 const bcrypt = require('bcrypt');
+// const process = require('process');
 const bodyParser = require('body-parser');
 const apiModules = require('./apiModules');
 const allQuerys = require('./allQuerys');
@@ -41,7 +45,7 @@ var con;
 var connect;
 app.use(async function (req, res, next) {
     // console.log("request");
-    console.log(req);
+    // console.log(req);
     // console.log(req.body);
     // console.log(next);
 
@@ -61,7 +65,7 @@ app.use(async function (req, res, next) {
         res.set('Content-Type', 'text/html');
         res.send(Buffer.from('<h2>Please contact admin </h2>'));
     }
-    else if (req.path == '/api/auth/login' || req.path == '/api/auth/registration' || req.path == '/user/activation' || req.path == '/api/admin/sendUserinfo') {
+    else if (req.path == '/api/auth/login' || req.path == '/api/auth/registration' || req.path == '/api/user/activation' || req.path == '/api/admin/sendUserinfo'||req.path=='/generateExcel') {
         console.log("if block enter");
         con = await Connection();
         connect = con.connection;
@@ -185,7 +189,7 @@ app.post(apiModules.registration, async (req, res) => {
             {
                 "statusCode": 202,
                 // "message": messages.validinput
-                "message":"Insufficient input"
+                "message":"Insufficient"
             }
             console.log(responseData);
             let jsonContent = JSON.stringify(responseData);
@@ -321,7 +325,7 @@ app.post(apiModules.registration, async (req, res) => {
         }
         let active = "0";
         let now = new Date();
-        let currentDateAndTime = date.format(now, 'DD-MM-YYYY HH:MM:SS');
+        let currentDateAndTime = date.format(now, 'YYYY-MM-DD HH:mm:ss');
         console.log("tttttt" + currentDateAndTime);
         // var passwordHash = bcrypt.hashSync(password, 10);
         const passwordHash = passwordHashFile.pass(password);
@@ -369,7 +373,7 @@ app.post(apiModules.registration, async (req, res) => {
             key += constants.characters.charAt(Math.floor(Math.random() * charactersLength));
         }
         console.log(key);
-        connect.query(query, [roleid, userName, emailId, passwordHash, active, currentDateAndTime, currentDateAndTime, key], function (err) {
+        connect.query(query, [roleid, userName, emailId, passwordHash, active, currentDateAndTime, currentDateAndTime, key],async function (err) {
             let responseData = "";
             if (err) {
                 console.error(err);
@@ -385,13 +389,14 @@ app.post(apiModules.registration, async (req, res) => {
                 // return res; 
             }
             else {
-                htmlContent = `<form action="` + process.env.BASE_URL + "/user/activation?key=" + key + `"` +
-                    `enctype="multipart/form-data" 
-                method="GET">
-                <h3>Hello ${userName}</h3>
-                <p>Thank you for register in ADMIN PORTAL. Please click on the click here button to activate your account</p>
-                <input type="submit" value="click here"></input>                
-                </form>`;
+                HTMLcontentFile = process.env.APP_URL+"/user_activation.html?key=" + key;
+                // `<form action="` + process.env.BASE_URL + "/user/activation?key=" + key + `"` +
+                //     `enctype="multipart/form-data" 
+                // method="GET">
+                // <h3>Hello ${userName}</h3>
+                // <p>Thank you for register in ADMIN PORTAL. Please click on the click here button to activate your account</p>
+                // <input type="submit" value="click here"></input>                
+                // </form>`;
                 // console.log(htmlContent);
                 //  `<div>
                 // <h1>Email Confirmation</h1>
@@ -399,6 +404,10 @@ app.post(apiModules.registration, async (req, res) => {
                 // <p>Thank you for register in ADMIN PORTAL. Please confirm your email by clicking on the following link</p>
                 // <a href=http://localhost:8977/api/${key}> Click here</a>
                 // </div>`;
+                // let x = await fetch(HTMLcontentFile);
+                htmlContent=`<h2>Hello ${userName}</h2> 
+                <p>Thank you for register in ADMIN PORTAL</p>
+                <a href="${HTMLcontentFile}"> Click here to activate </a>`;
                 email.send365Email(process.env.EMAIL_ID, emailId, constants.registrationSubject, htmlContent, constants.registrationText);
                 let responseData = {
                     "statusCode": 200,
@@ -688,7 +697,7 @@ app.post(apiModules.adminProject, async (req, res) => {
         let project_name = data.project_name;
         let project_version = data.project_version;
         let now = new Date();
-        let currentDateAndTime = date.format(now, 'DD-MM-YYYY HH:MM:SS');
+        let currentDateAndTime = date.format(now, 'YYYY-MM-DD HH:mm:ss');
         // let query="insert into projects(project_name,project_version,created_by,created_on,updated_on)values(?,?,?,?,?)"; 
         let query = allQuerys.insertProject;
         connect.query(query, [project_name, project_version, userid, currentDateAndTime, currentDateAndTime], async (err, result) => {
@@ -747,7 +756,7 @@ app.put(apiModules.adminProject, async (req, res) => {
         // var token=authorizationKey.split(" ")[1];
         // console.log(token);
         let now = new Date();
-        let currentDateAndTime = date.format(now, 'DD-MM-YYYY HH:MM:SS');
+        let currentDateAndTime = date.format(now, 'YYYY-MM-DD HH:mm:ss');
         var con = await Connection();
         var connect = con.connection;
         // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm},async(err, decoded)=>
@@ -1053,7 +1062,7 @@ app.post(apiModules.userProject, async (req, res) => {
         let project_name = data.project_name;
         let project_version = data.project_version;
         let now = new Date();
-        let currentDateAndTime = date.format(now, 'DD-MM-YYYY HH:MM:SS');
+        let currentDateAndTime = date.format(now, 'YYYY-MM-DD HH:mm:ss');
         // let query="insert into projects(project_name,project_version,created_by,created_on,updated_on)values(?,?,?,?,?)"; 
         let query = allQuerys.insertProject;
         connect.query(query, [project_name, project_version, userid, currentDateAndTime, currentDateAndTime], async (err, result) => {
@@ -1112,7 +1121,7 @@ app.put(apiModules.userProject, async (req, res) => {
         // var token=authorizationKey.split(" ")[1];
         // console.log(token);
         let now = new Date();
-        let currentDateAndTime = date.format(now, 'DD-MM-YYYY HH:MM:SS');
+        let currentDateAndTime = date.format(now, 'YYYY-MM-DD HH:mm:ss');
         var con = await Connection();
         var connect = con.connection;
         // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm},async(err, decoded)=>
@@ -1440,7 +1449,7 @@ app.post(apiModules.userDetailsServiceforAdmin, async (req, res) => {
         }
         let profile_pic = "";
         let now = new Date();
-        let currentDateAndTime = date.format(now, 'DD-MM-YYYY HH:MM:SS');
+        let currentDateAndTime = date.format(now, 'YYYY-MM-DD HH:mm:ss');
         let details = await userMailCheck.checkUserDetails(userid, con.db, con.connection);
         console.log(details + "!!!!!!!!!!!!!!!!!!!");
         if (details == 0) {
@@ -1528,7 +1537,7 @@ app.put(apiModules.userDetailsServiceforAdmin, async (req, res) => {
         // var token=authorizationKey.split(" ")[1];
         // console.log(token);
         let now = new Date();
-        let currentDateAndTime = date.format(now, 'DD-MM-YYYY HH:MM:SS');
+        let currentDateAndTime = date.format(now, 'YYYY-MM-DD HH:mm:ss');
         var con = await Connection();
         var connect = con.connection;
         // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
@@ -1834,7 +1843,7 @@ app.post(apiModules.userDetailsServiceforUser, async (req, res) => {
         }
         let profile_pic = "";
         let now = new Date();
-        let currentDateAndTime = date.format(now, 'DD-MM-YYYY HH:MM:SS');
+        let currentDateAndTime = date.format(now, 'YYYY-MM-DD HH:mm:ss');
         let details = await userMailCheck.checkUserDetails(userid, con.db, con.connection);
         console.log(details + "!!!!!!!!!!!!!!!!!!!");
         if (details == 0) {
@@ -1922,7 +1931,7 @@ app.put(apiModules.userDetailsServiceforUser, async (req, res) => {
         // var token=authorizationKey.split(" ")[1];
         // console.log(token);
         let now = new Date();
-        let currentDateAndTime = date.format(now, 'DD-MM-YYYY HH:MM:SS');
+        let currentDateAndTime = date.format(now, 'YYYY-MM-DD HH:mm:ss');
         var con = await Connection();
         var connect = con.connection;
         // var decoded = jwt.verify(token,accessTokenSecret,{algorithm: algorithm});
@@ -2513,7 +2522,7 @@ app.post(apiModules.userProfileAdmin, async (req, res) => {
                                 //  let profilepicPath=req.ip+port+"/images/"+userName+".png";
                                 console.log(profilepicPath);
                                 let now = new Date();
-                                let currentDateAndTime = date.format(now, 'DD-MM-YYYY HH:MM:SS');
+                                let currentDateAndTime = date.format(now, 'YYYY-MM-DD HH:mm:ss');
                                 // let queryforinsertorupdate="select * from user details where user_id=?";
                                 // let resultsforinsertorupdate=connect.query(queryforinsertorupdate,[userid]);
                                 let details = await userMailCheck.checkUserDetails(userid, con.db, con.connection);
@@ -2722,7 +2731,7 @@ app.put(apiModules.userProfileAdmin, async (req, res) => {
                                 //  let profilepicPath=req.ip+port+"/images/"+userName+".png";
                                 console.log(profilepicPath);
                                 let now = new Date();
-                                let currentDateAndTime = date.format(now, 'DD-MM-YYYY HH:MM:SS');
+                                let currentDateAndTime = date.format(now, 'YYYY-MM-DD HH:mm:ss');
                                 // let query="update user_details set first_name=?,last_name=?,profile_pic=?,updated_on=? where id=?"; 
                                 let query = allQuerys.updtaeUserDetailswithProfilePic;
                                 connect.query(query, [firstName, lastName, profilepicPath, currentDateAndTime, id], async (err, result) => {
@@ -3031,7 +3040,7 @@ app.post(apiModules.userProfileUser, async (req, res) => {
                                 //  let profilepicPath=req.ip+port+"/images/"+userName+".png";
                                 console.log(profilepicPath);
                                 let now = new Date();
-                                let currentDateAndTime = date.format(now, 'DD-MM-YYYY HH:MM:SS');
+                                let currentDateAndTime = date.format(now, 'YYYY-MM-DD HH:mm:ss');
                                 // let queryforinsertorupdate="select * from user details where user_id=?";
                                 // let resultsforinsertorupdate=connect.query(queryforinsertorupdate,[userid]);
                                 let details = await userMailCheck.checkUserDetails(userid, con.db, con.connection);
@@ -3240,7 +3249,7 @@ app.put(apiModules.userProfileUser, async (req, res) => {
                                 //  let profilepicPath=req.ip+port+"/images/"+userName+".png";
                                 console.log(profilepicPath);
                                 let now = new Date();
-                                let currentDateAndTime = date.format(now, 'DD-MM-YYYY HH:MM:SS');
+                                let currentDateAndTime = date.format(now, 'YYYY-MM-DD HH:mm:ss');
                                 // let query="update user_details set first_name=?,last_name=?,profile_pic=?,updated_on=? where id=?"; 
                                 let query = allQuerys.updtaeUserDetailswithProfilePic;
                                 connect.query(query, [firstName, lastName, profilepicPath, currentDateAndTime, id], async (err, result) => {
@@ -3807,53 +3816,123 @@ app.get(apiModules.userCount, async (req, res) => {
 app.post(apiModules.sendUserinfo, async (req, res) => {
     try {
         console.log("entered");
-        cron.schedule('*/10 * * * * *', async function () {
+        cron.schedule('*/20 * * * * *', async function () {
             console.log("entered1");
             // let emailId = req.data.emailId;
             let emailId = "harshavardhan.kadupu@ideabytes.com";
             let userid = 10;
+            let now = new Date();
+            let today = now.getDate();
+            let previosmonth = now.getMonth();
+            if(previosmonth<10)
+                {
+                     previosmonth='0'+previosmonth;
+                }
+            let year = now.getFullYear();
+            let time = date.format(now, 'HH:mm:ss')
+            let previousMonth = year + "-" + previosmonth + "-" + today + " " + time;
+            let currentDateAndTime = date.format(now, 'YYYY-MM-DD HH:mm:ss');
+            let query = allQuerys.MontlyUserdata;
+            let result = await con.db.query(con.connection, query, [currentDateAndTime, previousMonth]);
+            // excel.generateExcel(result);
             // excel.excel(userid, con.db, con.connection);
-            excel.excelUsingEJ(userid, con.db, con.connection);
-            let query1 = "select * from users where id=?";
-            let query2 = "select * from user_details where user_id=?";
-            const result = await con.db.query(con.connection, query1, [userid]);
-            const result2 = await con.db.query(con.connection, query2, [userid]);
-            let htmlContent =
-                "<style>table, th, td {  border:1px solid black; }  </style>" +
+            
+            // let excelstatus=excel.excelUsingEJ(userid, con.db, con.connection);
+            // let excelstatus=excel.usingExceljs(userid, con.db, con.connection);
+            if(result.length==0)
+            {
+                let message="No users found in "+currentDateAndTime+ " to "+previousMonth;
+                email.send365Email(process.env.EMAIL_ID, emailId, "User data",message );
+            }
+            else
+            {      
+                excel.generateExcel(result);
+                console.log("else block enterted");  
+                let htmlfront="<style>table, th, td {  border:1px solid black; }  </style>" +
                 "<table>" +
                 "<tr>" +
                 "<th> role_id </th>" +
+                "<th> id </th>" +
                 "<th>user name </th>" +
                 "<th>email_id</th>" +
                 "<th>created_date_and_time </th>" +
                 "<th>first_name</th>" +
                 "<th>last_name </th>" +
-                "<th>profile_pic </th>" +
                 "</tr>" +
-                "<tr>" +
-                "<td>" + result[0].role_id + "</td>" +
-                "<td>" + result[0].user_name + "</td>" +
-                "<td>" + result[0].email_id + "</td>" +
-                "<td>" + result[0].created_date_and_time + "</td>" +
-                "<td>" + result2[0].first_name + "</td>" +
-                "<td>" + result2[0].last_name + "</td>" +
-                "<td>" + result2[0].profile_pic + "</td>" +
-                "</tr>" +
-                "</table>";
-            console.log(htmlContent);
+                "<tr>" ;
+                var row="";
+                for(let i=0;i<result.length;i++){        
+                row +="<td>" + result[i].role_id + "</td>" +
+                "<td>" + result[i].id + "</td>" +
+                "<td>" + result[i].user_name + "</td>" +
+                "<td>" + result[i].email_id + "</td>" +
+                "<td>" + result[i].created_date_and_time + "</td>" +
+                "<td>" + result[i].first_name + "</td>" +
+                "<td>" + result[i].last_name + "</td>" ;
+                
+                }
+                let tablelast="</tr> </table>";
+                let html_content=htmlfront+row+tablelast;
+
+                // const path= './userdata.xlsx' ;   
+            // let query1 = "select * from users where id=?";
+            // let query2 = "select * from user_details where user_id=?";
+            // const result = await con.db.query(con.connection, query1, [userid]);
+            // const result2 = await con.db.query(con.connection, query2, [userid]);
+            // var workbook=XLSX.readFile(path);
+            // const sheetNames = workbook.SheetNames;
+            // var html = XLSX.utils.sheet_to_html(workbook.Sheets[sheetNames[0]]);
+            // html=`<table><tr><td data-t="s" data-v="role_id" id="sjs-A1">role_id</td><td data-t="s" data-v="id" id="sjs-B1">id</td><td data-t="s" data-v="user_name" id="sjs-C1">user_name</td><td data-t="s" data-v="first_name" id="sjs-D1">first_name</td><td data-t="s" data-v="last_name" id="sjs-E1">last_name</td><td data-t="s" data-v="created_date_and_time" id="sjs-F1">created_date_and_time</td></tr><tr><td data-t="n" data-v="1" id="sjs-A2">1</td><td data-t="n" data-v="7" id="sjs-B2">7</td><td data-t="s" data-v="vardhan" id="sjs-C2">vardhan</td><td data-t="s" data-v="a" id="sjs-D2">a</td><td data-t="s" data-v="a" id="sjs-E2">a</td><td data-t="n" data-v="44824.76918981481" id="sjs-F2">9/20/22</td></tr></table>`
+            // console.log(html);
+            // let htmlContent =
+            //     "<style>table, th, td {  border:1px solid black; }  </style>" +
+            //     "<table>" +
+            //     "<tr>" +
+            //     "<th> role_id </th>" +
+            //     "<th>user name </th>" +
+            //     "<th>email_id</th>" +
+            //     "<th>created_date_and_time </th>" +
+            //     "<th>first_name</th>" +
+            //     "<th>last_name </th>" +
+            //     "<th>profile_pic </th>" +
+            //     "</tr>" +
+            //     "<tr>" +
+            //     "<td>" + result[0].role_id + "</td>" +
+            //     "<td>" + result[0].user_name + "</td>" +
+            //     "<td>" + result[0].email_id + "</td>" +
+            //     "<td>" + result[0].created_date_and_time + "</td>" +
+            //     "<td>" + result2[0].first_name + "</td>" +
+            //     "<td>" + result2[0].last_name + "</td>" +
+            //     "<td>" + result2[0].profile_pic + "</td>" +
+            //     "</tr>" +
+            //     "</table>";
             let attachments = [{
                 filename: 'userdata.xlsx',
                 path: './userdata.xlsx'
             }];
-            email.send365Email(process.env.EMAIL_ID, emailId, "User data", htmlContent, "User Data", attachments);
+            let sentemail=await email.send365Email(process.env.EMAIL_ID, emailId, "User data", html_content,"", attachments);
+            if(sentemail==true)
+            {
             let responseData =
             {
                 "statusCode": 200,
                 "message": messages.emailSend
             };
             const jsonContent = JSON.stringify(responseData);
-            res.status(401).end(jsonContent);
+            res.status(200).end(jsonContent);
             return res;
+        }
+        else{
+            let responseData =
+            {
+                "statusCode": 200,
+                "message": messages.emailerr
+            };
+            const jsonContent = JSON.stringify(responseData);
+            res.status(200).end(jsonContent);
+            return res;
+        }
+        }
         })
     } catch (err) {
         let responseData =
@@ -3861,7 +3940,8 @@ app.post(apiModules.sendUserinfo, async (req, res) => {
             "statusCode": 401,
             "message": err.stack,
         };
-        console.log(err.stack);
+        console.log("*****************************************************************************");
+        // console.log(err.stack);
         const jsonContent = JSON.stringify(responseData);
         res.status(401).end(jsonContent);
         return res;
@@ -3873,6 +3953,8 @@ app.get(apiModules.userActivatiom, async (req, res) => {
         console.log(req);
         console.log(req.query);
         let key = req.query.key;
+        key.replace(/\s/g, "");
+        console.log(key);
         let query = allQuerys.getIdUsingKey;
         const resultforId = await con.db.query(con.connection, query, [key]);
         if (resultforId.length == 0) {
@@ -3901,15 +3983,49 @@ app.get(apiModules.userActivatiom, async (req, res) => {
         let responseData =
         {
             "statusCode": 401,
-            "message": message,
+            "message": err.stack,
         };
         const jsonContent = JSON.stringify(responseData);
         res.status(401).end(jsonContent);
         return res;
     }
 })
-//
+app.get(apiModules.generateExcel,(req,res)=>
+{
+    let data=[{
+        "Name":"harsha",
+        "id":1
+    },
+    {
+        "Name":"sai",
+        "id":2
+    }];
+    excel.generateExcel(data);
+    console.log("excel created")
 
+
+
+})
+app.get(apiModules.appInfo,(req,res)=>
+{
+    let data={"name":constants.name,"version":constants.version,"NodeVersion":process.versions.node,"NPM Version":constants.node_version};
+    console.log(process.versions);
+    let npm_version=checknpm({ node: ">= 18.3", },(error,result)=>
+    {
+        console.log(result);
+    })
+    console.log(npm_version);
+    let responseData =
+        {
+            "statusCode": 200,
+            "message": "The App details",
+            "AppData":data
+        };
+         const jsonContent = JSON.stringify(responseData);
+        res.status(200).end(jsonContent);
+        return res;
+
+})
 const port = process.env.PORT;
 app.listen(process.env.PORT, () => {
     console.log("===================================");

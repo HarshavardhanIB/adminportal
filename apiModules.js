@@ -17,5 +17,7 @@ module.exports={
  checkJwt: "/checkorvalidateJwt",
  sendUserinfo:"/api/admin/sendUserinfo",
  userActivatiom:"/api/user/activation",
+ generateExcel:"/generateExcel",
+ appInfo:"/api/admin/appInfo"
  
 }

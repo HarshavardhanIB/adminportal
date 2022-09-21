@@ -1,6 +1,6 @@
 {
   "name": "adminportal",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "user information",
   "main": "api.js",
   "scripts": {
@@ -13,6 +13,7 @@
     "bcrypt": "^5.0.1",
     "bcryptjs": "^2.4.3",
     "body-parser": "^1.20.0",
+    "check-node-version": "^4.2.1",
     "config": "^3.3.7",
     "dotenv": "^16.0.2",
     "email-validator": "^2.0.4",
@@ -31,6 +32,7 @@
     "node-static": "^0.7.11",
     "nodemailer": "^6.7.8",
     "path": "^0.12.7",
+    "process": "^0.11.10",
     "xlsx": "^0.18.5"
   }
 }

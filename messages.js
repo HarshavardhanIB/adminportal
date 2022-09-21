@@ -36,6 +36,7 @@ module.exports=
     checkMail:"Your account is not activated please check maill and activate yout account",
     invalidKey:"Invalid user activation key",
     userActivation:"User activated successfully proceed to login",
-    validinput:"Enter valid inputs"
+    validinput:"Enter valid inputs",
+    emailerr:"error while sending email"
 
 }
