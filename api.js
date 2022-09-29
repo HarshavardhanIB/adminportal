@@ -22,7 +22,7 @@ const PortId = process.env.BASE_URL;
 const jwt = require('jsonwebtoken');
 const checknpm = require("check-node-version");
 const excelJS = require('exceljs');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 // const process = require('process');
 const bodyParser = require('body-parser');
 const apiModules = require('./apiModules');
@@ -65,14 +65,13 @@ app.use(async function (req, res, next) {
         res.set('Content-Type', 'text/html');
         res.send(Buffer.from('<h2>Please contact admin </h2>'));
     }
-    else if (req.path == '/api/auth/login' || req.path == '/api/auth/registration' || req.path == '/api/user/activation' || req.path == '/api/admin/sendUserinfo'||req.path=='/generateExcel') {
+    else if (req.path == apiModules.login || req.path == apiModules.registration || req.path == apiModules.userActivatiom || req.path == apiModules.sendUserinfo || req.path == apiModules.generateExcel || req.path == apiModules.appInfo) {
         console.log("if block enter");
         con = await Connection();
         connect = con.connection;
         next();
     }
     else {
-
         try {
             console.log("use try block enter");
             var authorizationKey = req.headers['authorization'];
@@ -183,31 +182,30 @@ app.post(apiModules.registration, async (req, res) => {
         // console.log(req.body.length+"**********************************************8");
         // if (data.length < 4) 
         console.log(Object.keys(req.body).length);
-        if(Object.keys(req.body).length<4)
-        {
+        if (Object.keys(req.body).length < 4) {
             let responseData =
             {
                 "statusCode": 202,
                 // "message": messages.validinput
-                "message":"Insufficient"
+                "message": "Insufficient"
             }
             console.log(responseData);
             let jsonContent = JSON.stringify(responseData);
             res.end(jsonContent);
             return res;
         }
-        if (Object.keys(req.body.userName).length == 0 || Object.keys(req.body.emailid).length == 0 || Object.keys(req.body.password).length== 0 ||Object.keys(req.body.roleId).length== 0) {
+        if (Object.keys(req.body.userName).length == 0 || Object.keys(req.body.emailid).length == 0 || Object.keys(req.body.password).length == 0 || Object.keys(req.body.roleId).length == 0) {
             let responseData =
             {
                 "statusCode": 202,
-                "message":"Enter valid input"
+                "message": "Enter valid input"
                 // "message":messages.validinput
             }
             let jsonContent = JSON.stringify(responseData);
             res.end(jsonContent);
             return res;
         }
-               
+
         // var connection=dbConnection.connection;
         var con = await Connection();
         console.log(con);
@@ -324,7 +322,7 @@ app.post(apiModules.registration, async (req, res) => {
             return res;
         }
         let active = "0";
-        let now = new Date();
+        let now = new Date(); 
         let currentDateAndTime = date.format(now, 'YYYY-MM-DD HH:mm:ss');
         console.log("tttttt" + currentDateAndTime);
         // var passwordHash = bcrypt.hashSync(password, 10);
@@ -373,7 +371,7 @@ app.post(apiModules.registration, async (req, res) => {
             key += constants.characters.charAt(Math.floor(Math.random() * charactersLength));
         }
         console.log(key);
-        connect.query(query, [roleid, userName, emailId, passwordHash, active, currentDateAndTime, currentDateAndTime, key],async function (err) {
+        connect.query(query, [roleid, userName, emailId, passwordHash, active, currentDateAndTime, currentDateAndTime, key], async function (err) {
             let responseData = "";
             if (err) {
                 console.error(err);
@@ -389,7 +387,7 @@ app.post(apiModules.registration, async (req, res) => {
                 // return res; 
             }
             else {
-                HTMLcontentFile = process.env.APP_URL+"/user_activation.html?key=" + key;
+                HTMLcontentFile = process.env.APP_URL + "/user_activation.html?key=" + key;
                 // `<form action="` + process.env.BASE_URL + "/user/activation?key=" + key + `"` +
                 //     `enctype="multipart/form-data" 
                 // method="GET">
@@ -405,7 +403,7 @@ app.post(apiModules.registration, async (req, res) => {
                 // <a href=http://localhost:8977/api/${key}> Click here</a>
                 // </div>`;
                 // let x = await fetch(HTMLcontentFile);
-                htmlContent=`<h2>Hello ${userName}</h2> 
+                htmlContent = `<h2>Hello ${userName}</h2> 
                 <p>Thank you for register in ADMIN PORTAL</p>
                 <a href="${HTMLcontentFile}"> Click here to activate </a>`;
                 email.send365Email(process.env.EMAIL_ID, emailId, constants.registrationSubject, htmlContent, constants.registrationText);
@@ -784,7 +782,6 @@ app.put(apiModules.adminProject, async (req, res) => {
         let firstproject_name = data.project_name;
         let project_version = data.project_version;
         var id = req.query.id;
-        let profilePic = "";
         // let query="update projects set project_name=?,project_version=?,updated_on=? where id=?"; 
         let query = allQuerys.updtaeProject;
         connect.query(query, [firstproject_name, project_version, currentDateAndTime, id], async (err, result) => {
@@ -806,7 +803,7 @@ app.put(apiModules.adminProject, async (req, res) => {
                 {
                     "statusCode": 200,
                     // "message":"Project details updated successfully"
-                    "message": messages.deleteProject
+                    "message": messages.updateProject
                 };
                 const jsonContent = JSON.stringify(responseData);
                 res.end(jsonContent);
@@ -1416,6 +1413,17 @@ app.post(apiModules.userDetailsServiceforAdmin, async (req, res) => {
         console.log(checkLname);
         let fnLength = validator.isMaxLength(firstName, 50, min_length = 2);
         let lnLength = validator.isMaxLength(lastName, 50, min_length = 2);
+        if(!firstName||!lastName)
+        {
+            let responseData =
+            {
+                "statusCode": 202,
+                "message": "enter valid input"
+            }
+            let jsonContent = JSON.stringify(responseData);
+            res.end(jsonContent);
+            return res;
+        }
         // if(checkFname==false||checkLname==false||fnLength==false||lnLength==false)
         //     {
         //      let responseData=
@@ -1437,7 +1445,7 @@ app.post(apiModules.userDetailsServiceforAdmin, async (req, res) => {
             res.end(jsonContent);
             return res;
         }
-        if (firstName.length < 2 || firstName.length >= 50 || lastName.length < 2 || lastName.length >= 50) {
+        if (Object.keys(req.body.firstName).length< 2 || Object.keys(req.body.firstName).length>= 50 || Object.keys(req.body.lastName).length < 2 || Object.keys(req.body.lastName).length >= 50) {
             let responseData =
             {
                 "statusCode": 202,
@@ -1572,7 +1580,7 @@ app.put(apiModules.userDetailsServiceforAdmin, async (req, res) => {
             res.end(jsonContent);
             return res;
         }
-        if (firstName.length < 2 || firstName.length >= 50 || lastName.length < 2 || lastName.length >= 50) {
+        if (Object.keys(req.body.firstName).length < 2 || Object.keys(req.body.firstName).length >= 50 || Object.keys(req.body.lastName).length < 2 || Object.keys(req.body.lastName).length >= 50) {
             let responseData =
             {
                 "statusCode": 202,
@@ -1831,7 +1839,7 @@ app.post(apiModules.userDetailsServiceforUser, async (req, res) => {
             res.end(jsonContent);
             return res;
         }
-        if (firstName.length < 2 || firstName.length >= 50 || lastName.length < 2 || lastName.length >= 50) {
+        if (Object.keys(req.body.firstName).length < 2 || Object.keys(req.body.firstName).length >= 50 || Object.keys(req.body.lastName).length < 2 || Object.keys(req.body.lastName).length >= 50) {
             let responseData =
             {
                 "statusCode": 202,
@@ -1966,7 +1974,7 @@ app.put(apiModules.userDetailsServiceforUser, async (req, res) => {
             res.end(jsonContent);
             return res;
         }
-        if (firstName.length < 2 || firstName.length >= 50 || lastName.length < 2 || lastName.length >= 50) {
+        if (Object.keys(req.body.firstName).length < 2 || Object.keys(req.body.firstName).length >= 50 || Object.keys(req.body.lastName).length < 2 || Object.keys(req.body.lastName).length >= 50) {
             let responseData =
             {
                 "statusCode": 202,
@@ -2467,7 +2475,7 @@ app.post(apiModules.userProfileAdmin, async (req, res) => {
                 res.end(jsonContent);
                 return res;
             }
-            if (firstName.length < 2 || firstName.length >= 50 || lastName.length < 2 || lastName.length >= 50) {
+            if (Object.keys(req.body.firstName).length < 2 || Object.keys(req.body.firstName).length >= 50 || Object.keys(req.body.lastName).length < 2 || Object.keys(req.body.lastName).length >= 50) {
                 let responseData =
                 {
                     "statusCode": 202,
@@ -2676,7 +2684,7 @@ app.put(apiModules.userProfileAdmin, async (req, res) => {
                 res.end(jsonContent);
                 return res;
             }
-            if (firstName.length < 2 || firstName.length >= 50 || lastName.length < 2 || lastName.length >= 50) {
+            if (Object.keys(req.body.firstName).length < 2 || Object.keys(req.body.firstName).length >= 50 || Object.keys(req.body.lastName).length < 2 || Object.keys(req.body.lastName).length >= 50) {
                 let responseData =
                 {
                     "statusCode": 202,
@@ -2985,7 +2993,7 @@ app.post(apiModules.userProfileUser, async (req, res) => {
                 res.end(jsonContent);
                 return res;
             }
-            if (firstName.length < 2 || firstName.length >= 50 || lastName.length < 2 || lastName.length >= 50) {
+            if (Object.keys(req.body.firstName).length < 2 || Object.keys(req.body.firstName).length >= 50 || Object.keys(req.body.lastName).length < 2 || Object.keys(req.body.lastName).length >= 50) {
                 let responseData =
                 {
                     "statusCode": 202,
@@ -3194,7 +3202,7 @@ app.put(apiModules.userProfileUser, async (req, res) => {
                 res.end(jsonContent);
                 return res;
             }
-            if (firstName.length < 2 || firstName.length >= 50 || lastName.length < 2 || lastName.length >= 50) {
+            if (Object.keys(req.body.firstName).length < 2 || Object.keys(req.body.firstName).length >= 50 || Object.keys(req.body.lastName).length < 2 || Object.keys(req.body.lastName).length >= 50) {
                 let responseData =
                 {
                     "statusCode": 202,
@@ -3816,7 +3824,7 @@ app.get(apiModules.userCount, async (req, res) => {
 app.post(apiModules.sendUserinfo, async (req, res) => {
     try {
         console.log("entered");
-        cron.schedule('*/20 * * * * *', async function () {
+        cron.schedule('* * * * 1 *', async function () {
             console.log("entered1");
             // let emailId = req.data.emailId;
             let emailId = "harshavardhan.kadupu@ideabytes.com";
@@ -3824,10 +3832,9 @@ app.post(apiModules.sendUserinfo, async (req, res) => {
             let now = new Date();
             let today = now.getDate();
             let previosmonth = now.getMonth();
-            if(previosmonth<10)
-                {
-                     previosmonth='0'+previosmonth;
-                }
+            if (previosmonth < 10) {
+                previosmonth = '0' + previosmonth;
+            }
             let year = now.getFullYear();
             let time = date.format(now, 'HH:mm:ss')
             let previousMonth = year + "-" + previosmonth + "-" + today + " " + time;
@@ -3836,103 +3843,100 @@ app.post(apiModules.sendUserinfo, async (req, res) => {
             let result = await con.db.query(con.connection, query, [currentDateAndTime, previousMonth]);
             // excel.generateExcel(result);
             // excel.excel(userid, con.db, con.connection);
-            
+
             // let excelstatus=excel.excelUsingEJ(userid, con.db, con.connection);
             // let excelstatus=excel.usingExceljs(userid, con.db, con.connection);
-            if(result.length==0)
-            {
-                let message="No users found in "+currentDateAndTime+ " to "+previousMonth;
-                email.send365Email(process.env.EMAIL_ID, emailId, "User data",message );
+            if (result.length == 0) {
+                let message = "No users found in " + currentDateAndTime + " to " + previousMonth;
+                email.send365Email(process.env.EMAIL_ID, emailId, "User data", message);
             }
-            else
-            {      
+            else {
                 excel.generateExcel(result);
-                console.log("else block enterted");  
-                let htmlfront="<style>table, th, td {  border:1px solid black; }  </style>" +
-                "<table>" +
-                "<tr>" +
-                "<th> role_id </th>" +
-                "<th> id </th>" +
-                "<th>user name </th>" +
-                "<th>email_id</th>" +
-                "<th>created_date_and_time </th>" +
-                "<th>first_name</th>" +
-                "<th>last_name </th>" +
-                "</tr>" +
-                "<tr>" ;
-                var row="";
-                for(let i=0;i<result.length;i++){        
-                row +="<td>" + result[i].role_id + "</td>" +
-                "<td>" + result[i].id + "</td>" +
-                "<td>" + result[i].user_name + "</td>" +
-                "<td>" + result[i].email_id + "</td>" +
-                "<td>" + result[i].created_date_and_time + "</td>" +
-                "<td>" + result[i].first_name + "</td>" +
-                "<td>" + result[i].last_name + "</td>" ;
-                
+                console.log("else block enterted");
+                let htmlfront = "<style>table, th, td {  border:1px solid black; }  </style>" +
+                    "<table>" +
+                    "<tr>" +
+                    "<th> role_id </th>" +
+                    "<th> id </th>" +
+                    "<th>user name </th>" +
+                    "<th>email_id</th>" +
+                    "<th>created_date_and_time </th>" +
+                    "<th>first_name</th>" +
+                    "<th>last_name </th>" +
+                    "</tr>" +
+                    "<tr>";
+                var row = "";
+                for (let i = 0; i < result.length; i++) {
+                    row += "<td>" + result[i].role_id + "</td>" +
+                        "<td>" + result[i].id + "</td>" +
+                        "<td>" + result[i].user_name + "</td>" +
+                        "<td>" + result[i].email_id + "</td>" +
+                        "<td>" + result[i].created_date_and_time + "</td>" +
+                        "<td>" + result[i].first_name + "</td>" +
+                        "<td>" + result[i].last_name + "</td>";
+
                 }
-                let tablelast="</tr> </table>";
-                let html_content=htmlfront+row+tablelast;
+                let tablelast = "</tr> </table>";
+                let html_content = htmlfront + row + tablelast;
 
                 // const path= './userdata.xlsx' ;   
-            // let query1 = "select * from users where id=?";
-            // let query2 = "select * from user_details where user_id=?";
-            // const result = await con.db.query(con.connection, query1, [userid]);
-            // const result2 = await con.db.query(con.connection, query2, [userid]);
-            // var workbook=XLSX.readFile(path);
-            // const sheetNames = workbook.SheetNames;
-            // var html = XLSX.utils.sheet_to_html(workbook.Sheets[sheetNames[0]]);
-            // html=`<table><tr><td data-t="s" data-v="role_id" id="sjs-A1">role_id</td><td data-t="s" data-v="id" id="sjs-B1">id</td><td data-t="s" data-v="user_name" id="sjs-C1">user_name</td><td data-t="s" data-v="first_name" id="sjs-D1">first_name</td><td data-t="s" data-v="last_name" id="sjs-E1">last_name</td><td data-t="s" data-v="created_date_and_time" id="sjs-F1">created_date_and_time</td></tr><tr><td data-t="n" data-v="1" id="sjs-A2">1</td><td data-t="n" data-v="7" id="sjs-B2">7</td><td data-t="s" data-v="vardhan" id="sjs-C2">vardhan</td><td data-t="s" data-v="a" id="sjs-D2">a</td><td data-t="s" data-v="a" id="sjs-E2">a</td><td data-t="n" data-v="44824.76918981481" id="sjs-F2">9/20/22</td></tr></table>`
-            // console.log(html);
-            // let htmlContent =
-            //     "<style>table, th, td {  border:1px solid black; }  </style>" +
-            //     "<table>" +
-            //     "<tr>" +
-            //     "<th> role_id </th>" +
-            //     "<th>user name </th>" +
-            //     "<th>email_id</th>" +
-            //     "<th>created_date_and_time </th>" +
-            //     "<th>first_name</th>" +
-            //     "<th>last_name </th>" +
-            //     "<th>profile_pic </th>" +
-            //     "</tr>" +
-            //     "<tr>" +
-            //     "<td>" + result[0].role_id + "</td>" +
-            //     "<td>" + result[0].user_name + "</td>" +
-            //     "<td>" + result[0].email_id + "</td>" +
-            //     "<td>" + result[0].created_date_and_time + "</td>" +
-            //     "<td>" + result2[0].first_name + "</td>" +
-            //     "<td>" + result2[0].last_name + "</td>" +
-            //     "<td>" + result2[0].profile_pic + "</td>" +
-            //     "</tr>" +
-            //     "</table>";
-            let attachments = [{
-                filename: 'userdata.xlsx',
-                path: './userdata.xlsx'
-            }];
-            let sentemail=await email.send365Email(process.env.EMAIL_ID, emailId, "User data", html_content,"", attachments);
-            if(sentemail==true)
-            {
-            let responseData =
-            {
-                "statusCode": 200,
-                "message": messages.emailSend
-            };
-            const jsonContent = JSON.stringify(responseData);
-            res.status(200).end(jsonContent);
-            return res;
-        }
-        else{
-            let responseData =
-            {
-                "statusCode": 200,
-                "message": messages.emailerr
-            };
-            const jsonContent = JSON.stringify(responseData);
-            res.status(200).end(jsonContent);
-            return res;
-        }
-        }
+                // let query1 = "select * from users where id=?";
+                // let query2 = "select * from user_details where user_id=?";
+                // const result = await con.db.query(con.connection, query1, [userid]);
+                // const result2 = await con.db.query(con.connection, query2, [userid]);
+                // var workbook=XLSX.readFile(path);
+                // const sheetNames = workbook.SheetNames;
+                // var html = XLSX.utils.sheet_to_html(workbook.Sheets[sheetNames[0]]);
+                // html=`<table><tr><td data-t="s" data-v="role_id" id="sjs-A1">role_id</td><td data-t="s" data-v="id" id="sjs-B1">id</td><td data-t="s" data-v="user_name" id="sjs-C1">user_name</td><td data-t="s" data-v="first_name" id="sjs-D1">first_name</td><td data-t="s" data-v="last_name" id="sjs-E1">last_name</td><td data-t="s" data-v="created_date_and_time" id="sjs-F1">created_date_and_time</td></tr><tr><td data-t="n" data-v="1" id="sjs-A2">1</td><td data-t="n" data-v="7" id="sjs-B2">7</td><td data-t="s" data-v="vardhan" id="sjs-C2">vardhan</td><td data-t="s" data-v="a" id="sjs-D2">a</td><td data-t="s" data-v="a" id="sjs-E2">a</td><td data-t="n" data-v="44824.76918981481" id="sjs-F2">9/20/22</td></tr></table>`
+                // console.log(html);
+                // let htmlContent =
+                //     "<style>table, th, td {  border:1px solid black; }  </style>" +
+                //     "<table>" +
+                //     "<tr>" +
+                //     "<th> role_id </th>" +
+                //     "<th>user name </th>" +
+                //     "<th>email_id</th>" +
+                //     "<th>created_date_and_time </th>" +
+                //     "<th>first_name</th>" +
+                //     "<th>last_name </th>" +
+                //     "<th>profile_pic </th>" +
+                //     "</tr>" +
+                //     "<tr>" +
+                //     "<td>" + result[0].role_id + "</td>" +
+                //     "<td>" + result[0].user_name + "</td>" +
+                //     "<td>" + result[0].email_id + "</td>" +
+                //     "<td>" + result[0].created_date_and_time + "</td>" +
+                //     "<td>" + result2[0].first_name + "</td>" +
+                //     "<td>" + result2[0].last_name + "</td>" +
+                //     "<td>" + result2[0].profile_pic + "</td>" +
+                //     "</tr>" +
+                //     "</table>";
+                let attachments = [{
+                    filename: 'userdata.xlsx',
+                    path: './userdata.xlsx'
+                }];
+                let sentemail = await email.send365Email(process.env.EMAIL_ID, emailId, "User data", html_content, "", attachments);
+                if (sentemail == true) {
+                    let responseData =
+                    {
+                        "statusCode": 200,
+                        "message": messages.emailSend
+                    };
+                    const jsonContent = JSON.stringify(responseData);
+                    res.status(200).end(jsonContent);
+                    return res;
+                }
+                else {
+                    let responseData =
+                    {
+                        "statusCode": 200,
+                        "message": messages.emailerr
+                    };
+                    const jsonContent = JSON.stringify(responseData);
+                    res.status(200).end(jsonContent);
+                    return res;
+                }
+            }
         })
     } catch (err) {
         let responseData =
@@ -3990,15 +3994,14 @@ app.get(apiModules.userActivatiom, async (req, res) => {
         return res;
     }
 })
-app.get(apiModules.generateExcel,(req,res)=>
-{
-    let data=[{
-        "Name":"harsha",
-        "id":1
+app.get(apiModules.generateExcel, (req, res) => {
+    let data = [{
+        "Name": "harsha",
+        "id": 1
     },
     {
-        "Name":"sai",
-        "id":2
+        "Name": "sai",
+        "id": 2
     }];
     excel.generateExcel(data);
     console.log("excel created")
@@ -4006,24 +4009,21 @@ app.get(apiModules.generateExcel,(req,res)=>
 
 
 })
-app.get(apiModules.appInfo,(req,res)=>
-{
-    let data={"name":constants.name,"version":constants.version,"NodeVersion":process.versions.node,"NPM Version":constants.node_version};
-    console.log(process.versions);
-    let npm_version=checknpm({ node: ">= 18.3", },(error,result)=>
-    {
-        console.log(result);
-    })
-    console.log(npm_version);
+app.get(apiModules.appInfo, (req, res) => {
+
+    // let npm_version = checknpm('--npm VERSION', (error, result) => {
+    //     // console.log(result.npm.version);        
+    // })
+    let data = { "name": constants.name, "version": constants.version, "NodeVersion": process.versions.node, "NPM Version": constants.npm_version };
     let responseData =
-        {
-            "statusCode": 200,
-            "message": "The App details",
-            "AppData":data
-        };
-         const jsonContent = JSON.stringify(responseData);
-        res.status(200).end(jsonContent);
-        return res;
+    {
+        "statusCode": 200,
+        "message": "The App details",
+        "AppData": data
+    };
+    const jsonContent = JSON.stringify(responseData);
+    res.status(200).end(jsonContent);
+    return res;
 
 })
 const port = process.env.PORT;
